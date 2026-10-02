@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Semantic colour tokens shared by every role (one product, one visual system).
+ * Stored as RGB channels so Tailwind opacity modifiers (e.g. bg-console-panel/95) keep working.
+ * `.dark` swaps the same tokens, so every screen follows the Appearance setting.
+ */
+@layer base {
+    :root {
+        --console-bg: 246 247 249; /* paper ground */
+        --console-panel: 255 255 255;
+        --console-raised: 238 244 246; /* hover tint */
+        --console-line: 212 212 212; /* neutral-300 blueprint frame */
+        --console-mark: 163 163 163;
+        --console-hero: 22 48 92; /* reversed navy field */
+        --console-heading: 22 48 92;
+        --console-text: 28 37 51;
+        --console-muted: 91 102 117;
+        --console-dim: 138 148 163;
+        --console-track: 229 229 229;
+        --console-closed: 245 245 245;
+        --console-avatar: 220 237 241;
+        --console-error: 220 38 38; /* red-600 */
+        color-scheme: light;
+    }
+
+    .dark {
+        --console-bg: 11 18 32;
+        --console-panel: 17 27 45;
+        --console-raised: 27 41 64;
+        --console-line: 41 56 82;
+        --console-mark: 78 95 122;
+        --console-hero: 20 45 88;
+        --console-heading: 226 234 245;
+        --console-text: 203 213 225;
+        --console-muted: 142 156 178;
+        --console-dim: 106 121 145;
+        --console-track: 36 50 74;
+        --console-closed: 30 42 62;
+        --console-avatar: 29 58 86;
+        --console-error: 248 113 113; /* red-400, readable on navy */
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-console-bg;
+    }
+
+    /* Text fields with suggestions (e.g. Client name) stay plain inputs: hide the browser's ▼ arrow.
+       The suggestions still appear while typing. */
+    input[list]::-webkit-calendar-picker-indicator {
+        display: none !important;
+    }
+
+    /* Edge adds its own reveal/clear buttons; our fields already have a show-password toggle. */
+    input[type='password']::-ms-reveal,
+    input[type='password']::-ms-clear {
+        display: none;
+    }
+}
+
+@media print {
+    .dark {
+        --console-bg: 255 255 255;
+        --console-panel: 255 255 255;
+        --console-line: 212 212 212;
+        --console-heading: 22 48 92;
+        --console-text: 28 37 51;
+        --console-muted: 91 102 117;
+    }
+}
+
+/* "Download as PDF" on a payslip prints only the payslip. */
+@media print {
+    body.print-payslip * {
+        visibility: hidden;
+    }
+
+    body.print-payslip [data-print-root],
+    body.print-payslip [data-print-root] * {
+        visibility: visible;
+    }
+
+    body.print-payslip [data-print-root] {
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+    }
+}

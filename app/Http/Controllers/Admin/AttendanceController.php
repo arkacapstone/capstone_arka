@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Attendance\CorrectAttendance;
 use App\Actions\Attendance\FieldCorrected;
-use App\Actions\Attendance\ReviewCorrectionRequest;
 use App\Enums\AttendanceStatus;
 use App\Enums\CorrectionStatus;
 use App\Enums\UserRole;
@@ -18,11 +17,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Admin → Attendance Management & Corrections (Blueprint §7–§8, Admin flow §V).
@@ -36,7 +33,7 @@ class AttendanceController extends Controller
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'employee' => ['nullable', 'integer'],
             'status' => ['nullable', Rule::enum(AttendanceStatus::class)],
-            'tab' => ['nullable', 'in:records,requests,log'],
+            'tab' => ['nullable', 'in:records,log'],
             'fix' => ['nullable', 'integer'],
         ]);
 
@@ -81,16 +78,6 @@ class AttendanceController extends Controller
                 'incomplete' => $count(AttendanceStatus::Incomplete),
             ],
             'records' => Paginated::from($records),
-            'requests' => AttendanceCorrection::query()
-                ->pending()
-                ->where('source', 'employee')
-                ->where('employee_id', '!=', $request->user()->id)
-                ->with('employee:id,name,employee_code')
-                ->orderBy('date')
-                ->orderBy('id')
-                ->get()
-                ->map(fn (AttendanceCorrection $correction) => $this->presentCorrection($correction))
-                ->all(),
             'log' => AttendanceCorrection::query()
                 ->where('status', '!=', CorrectionStatus::Pending)
                 ->with(['employee:id,name', 'reviewer:id,name'])
@@ -133,36 +120,6 @@ class AttendanceController extends Controller
         );
 
         return back()->with('success', 'Attendance corrected. The original value is kept in the correction log.');
-    }
-
-    public function approve(Request $request, AttendanceCorrection $correction, ReviewCorrectionRequest $review): RedirectResponse
-    {
-        abort_if($correction->employee_id === $request->user()->id, 403, 'Another Admin reviews your own correction requests.');
-        $validated = $request->validate(['remarks' => ['nullable', 'string', 'max:500']]);
-
-        $review->approve($request->user(), $correction, $validated['remarks'] ?? null);
-
-        return back()->with('success', 'Correction approved and applied to attendance.');
-    }
-
-    public function reject(Request $request, AttendanceCorrection $correction, ReviewCorrectionRequest $review): RedirectResponse
-    {
-        abort_if($correction->employee_id === $request->user()->id, 403, 'Another Admin reviews your own correction requests.');
-        $validated = $request->validate(['remarks' => ['required', 'string', 'max:500']]);
-
-        $review->reject($request->user(), $correction, $validated['remarks']);
-
-        return back()->with('success', 'Request closed. The contractor has been notified.');
-    }
-
-    /**
-     * Read-only view of the proof a contractor attached to their correction request.
-     */
-    public function proof(AttendanceCorrection $correction): StreamedResponse
-    {
-        abort_unless($correction->proof_path && Storage::disk('local')->exists($correction->proof_path), 404);
-
-        return Storage::disk('local')->response($correction->proof_path, null, [], 'inline');
     }
 
     /**
@@ -211,8 +168,6 @@ class AttendanceController extends Controller
             'original' => $pair($correction->original_time_in, $correction->original_time_out),
             'requested' => $pair($correction->requested_time_in, $correction->requested_time_out),
             'reason' => $correction->reason,
-            'hasProof' => $correction->proof_path !== null,
-            'proofUrl' => $correction->proof_path ? route('admin.attendance.requests.proof', $correction) : null,
             'status' => $correction->status->value,
             'remarks' => $correction->admin_remarks,
             'reviewer' => $correction->reviewer?->name,

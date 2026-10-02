@@ -95,8 +95,8 @@ class VerifyAttendance
 
         $this->activity->log('attendance', 'Verified attendance for payroll', $verification, "{$contractor->name} · {$period->period_name}");
 
+        // The Admin reviews the changes; the Super Admin only hears once the Admin submits the verified period.
         // An Admin verifying their own attendance doesn't need to be told about it.
-        $this->notifier->superAdmins(new AttendanceVerified($verification));
         $this->notifier->admins(new AttendanceVerified($verification), except: $contractor);
 
         return $verification;
@@ -109,6 +109,10 @@ class VerifyAttendance
     {
         if ($period->status !== PayrollPeriodStatus::Verification || ! PayrollCalculator::ratesFor($period)->where('employee_id', $contractor->id)->exists()) {
             throw ValidationException::withMessages(['time_in' => 'Attendance verification is not open for this period.']);
+        }
+
+        if ($period->isSubmittedByAdmin()) {
+            throw ValidationException::withMessages(['time_in' => 'An Admin already submitted this period to the Super Admin, so it can no longer be changed.']);
         }
 
         $verification = AttendanceVerification::query()->firstOrCreate(['period_id' => $period->id, 'employee_id' => $contractor->id]);

@@ -1,13 +1,13 @@
 import Dialog from '@/Components/Console/Dialog';
 import Field, { ConsoleButton } from '@/Components/Console/Field';
 import Panel, { MetricRow } from '@/Components/Console/Panel';
-import StatusBadge from '@/Components/Console/StatusBadge';
+import StatusBadge, { Tag } from '@/Components/Console/StatusBadge';
 import { ArrowLeftIcon } from '@/Components/Icons';
 import { StageActions, Stepper, Totals, periodTone } from '@/Components/Payroll/PayrollStages';
 import ConfirmDialog from '@/Components/Workforce/ConfirmDialog';
 import Table, { Cell, Row } from '@/Components/Workforce/Table';
 import AppLayout from '@/Layouts/AppLayout';
-import { fullDate, peso } from '@/lib/format';
+import { dateTime, fullDate, peso } from '@/lib/format';
 import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -71,9 +71,42 @@ function AdjustForm({ row, onDone }) {
     );
 }
 
-export default function Show({ overview, rows, canAdjust, canDelete, employeesPaid, verification }) {
+/** Puts a contractor's payroll on hold (e.g. lost company equipment); it is left out of the release. */
+function HoldForm({ row, onDone }) {
+    const { data, setData, post, processing, errors } = useForm({ hold_reason: row.holdSuggestion ?? '' });
+
+    const submit = (e) => {
+        e.preventDefault();
+        post(route('super-admin.payroll.hold', row.id), { preserveScroll: true, onSuccess: onDone });
+    };
+
+    return (
+        <form onSubmit={submit} className="flex flex-col gap-5">
+            <p className="text-sm text-console-muted">
+                Every row of this contractor's payroll in this period stays out of the release until you lift the hold. Their payslip shows as on hold.
+            </p>
+            <Field
+                id="hold_reason"
+                label="Reason"
+                value={data.hold_reason}
+                onChange={(e) => setData('hold_reason', e.target.value)}
+                error={errors.hold_reason}
+                placeholder="e.g. Lost company laptop, unresolved checklist"
+                required
+            />
+            <ConsoleButton type="submit" disabled={processing}>
+                Hold payroll
+            </ConsoleButton>
+        </form>
+    );
+}
+
+export default function Show({ overview, rows, canAdjust, canHold, canDelete, employeesPaid, verification }) {
     const { period, action, totals } = overview;
     const [adjusting, setAdjusting] = useState(null);
+    const [holding, setHolding] = useState(null);
+    const [lifting, setLifting] = useState(null);
+    const hasActions = canAdjust || canHold;
     const [deleting, setDeleting] = useState(false);
 
     return (
@@ -118,8 +151,10 @@ export default function Show({ overview, rows, canAdjust, canDelete, employeesPa
                                 <span className="font-semibold text-console-heading">
                                     {verification.verified} of {employeesPaid}
                                 </span>{' '}
-                                {employeesPaid === 1 ? 'contractor has' : 'contractors have'} submitted their attendance as verified · {verification.fixed} fixed at least one day.
-                                Fixes are saved right away and appear in the attendance correction log.
+                                {employeesPaid === 1 ? 'contractor has' : 'contractors have'} submitted their attendance as verified.{' '}
+                                {verification.adminSubmittedAt
+                                    ? `${verification.adminSubmittedBy ?? 'An Admin'} reviewed the changes and submitted the verified period on ${dateTime(verification.adminSubmittedAt)}.`
+                                    : 'The Admin reviews their changes and submits the verified period to you.'}
                             </p>
                         )}
                         <p>
@@ -143,9 +178,9 @@ export default function Show({ overview, rows, canAdjust, canDelete, employeesPa
                             'Other',
                             'Net pay',
                             'Status',
-                            ...(canAdjust ? ['Action'] : []),
+                            ...(hasActions ? ['Action'] : []),
                         ]}
-                        actions={canAdjust}
+                        actions={hasActions}
                         isEmpty={rows.length === 0}
                         emptyMessage="No payroll rows yet."
                         minWidth={1100}
@@ -157,6 +192,9 @@ export default function Show({ overview, rows, canAdjust, canDelete, employeesPa
                                     <p className="font-mono text-[11px] text-console-dim">
                                         {row.employee.code} · {row.client}
                                     </p>
+                                    {row.holdSuggestion && !row.heldAt && row.status !== 'released' && (
+                                        <p className="mt-1 text-[11px] text-console-heading">Suggested hold · {row.holdSuggestion}</p>
+                                    )}
                                 </Cell>
                                 <Cell className="font-mono">{peso(row.gross)}</Cell>
                                 <Cell className="font-mono">{peso(row.additionalPay + row.overtime + row.reward)}</Cell>
@@ -167,13 +205,33 @@ export default function Show({ overview, rows, canAdjust, canDelete, employeesPa
                                 <Cell className="font-mono">{peso(row.other)}</Cell>
                                 <Cell className="font-mono font-medium text-console-heading">{peso(row.net)}</Cell>
                                 <Cell>
-                                    <StatusBadge status={row.status === 'draft' ? 'pending' : row.status === 'reviewed' ? 'pending' : 'approved'} label={row.status} />
+                                    {row.heldAt ? (
+                                        <span title={row.holdReason}>
+                                            <Tag tone="waiting">On hold</Tag>
+                                        </span>
+                                    ) : (
+                                        <StatusBadge status={row.status === 'draft' ? 'pending' : row.status === 'reviewed' ? 'pending' : 'approved'} label={row.status} />
+                                    )}
                                 </Cell>
-                                {canAdjust && (
+                                {hasActions && (
                                     <td className="py-3 text-right align-top">
-                                        <button type="button" onClick={() => setAdjusting(row)} className="px-2 py-1 text-xs text-arka-teal hover:bg-console-raised">
-                                            Adjust
-                                        </button>
+                                        <div className="flex justify-end gap-1">
+                                            {canAdjust && (
+                                                <button type="button" onClick={() => setAdjusting(row)} className="px-2 py-1 text-xs text-arka-teal hover:bg-console-raised">
+                                                    Adjust
+                                                </button>
+                                            )}
+                                            {canHold && row.heldAt && (
+                                                <button type="button" onClick={() => setLifting(row)} className="px-2 py-1 text-xs text-arka-teal hover:bg-console-raised">
+                                                    Lift hold
+                                                </button>
+                                            )}
+                                            {canHold && !row.heldAt && row.status !== 'released' && (
+                                                <button type="button" onClick={() => setHolding(row)} className="px-2 py-1 text-xs text-console-heading hover:bg-console-raised">
+                                                    Hold
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 )}
                             </Row>
@@ -203,6 +261,23 @@ export default function Show({ overview, rows, canAdjust, canDelete, employeesPa
             >
                 {adjusting && <AdjustForm key={adjusting.id} row={adjusting} onDone={() => setAdjusting(null)} />}
             </Dialog>
+
+            <Dialog open={holding !== null} onClose={() => setHolding(null)} side title="Hold payroll" description={holding ? holding.employee.name : ''}>
+                {holding && <HoldForm key={holding.id} row={holding} onDone={() => setHolding(null)} />}
+            </Dialog>
+
+            <ConfirmDialog
+                open={lifting !== null}
+                title="Lift the hold?"
+                body={
+                    period.status === 'released'
+                        ? `${lifting?.employee.name}'s payslip is released now and they are notified.`
+                        : `${lifting?.employee.name}'s payroll is released with everyone else's.`
+                }
+                confirmLabel="Lift hold"
+                onConfirm={() => router.delete(route('super-admin.payroll.hold.release', lifting.id), { preserveScroll: true, onFinish: () => setLifting(null) })}
+                onClose={() => setLifting(null)}
+            />
 
             <ConfirmDialog
                 open={deleting}

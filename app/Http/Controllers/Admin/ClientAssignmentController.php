@@ -85,8 +85,8 @@ class ClientAssignmentController extends Controller
             'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'client_name' => ['required', 'string', 'min:2', 'max:100'],
             'employment_type' => ['required', Rule::enum(EmploymentType::class)],
-            'start_date' => ['required', 'date'],
-        ], attributes: ['employee_id' => 'contractor', 'client_name' => 'client name', 'employment_type' => 'Full-Time / Part-Time', 'start_date' => 'start date']);
+            'start_date' => ['required', 'date', 'after_or_equal:today'],
+        ], ['start_date.after_or_equal' => 'The start date cannot be in the past.'], attributes: ['employee_id' => 'contractor', 'client_name' => 'client name', 'employment_type' => 'Full-Time / Part-Time', 'start_date' => 'start date']);
 
         $manage->submit($request->user(), $validated);
 

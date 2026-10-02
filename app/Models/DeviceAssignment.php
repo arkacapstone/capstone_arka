@@ -6,11 +6,18 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['device_id', 'employee_id', 'assigned_date', 'return_date', 'acknowledgement_signed', 'status', 'notes'])]
 class DeviceAssignment extends Model
 {
     use HasFactory;
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_RETURNED = 'returned';
+
+    public const STATUS_LOST = 'lost';
 
     protected function casts(): array
     {
@@ -35,5 +42,15 @@ class DeviceAssignment extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'employee_id');
+    }
+
+    /**
+     * The deduction charged for this device when it was lost.
+     *
+     * @return HasOne<DeviceDeduction, $this>
+     */
+    public function deduction(): HasOne
+    {
+        return $this->hasOne(DeviceDeduction::class);
     }
 }

@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'days_absent', 'absence_deduction',
     'late_hours', 'late_minutes', 'late_deduction',
     'overtime_amount', 'reward_amount', 'cash_advance_deduction', 'device_deduction', 'other_deductions',
-    'net_pay', 'status', 'approved_by', 'approved_at',
+    'net_pay', 'status', 'approved_by', 'approved_at', 'held_at', 'hold_reason',
 ])]
 class Payroll extends Model
 {
@@ -46,6 +46,7 @@ class Payroll extends Model
             'net_pay' => 'decimal:2',
             'status' => PayrollStatus::class,
             'approved_at' => 'datetime',
+            'held_at' => 'datetime',
         ];
     }
 

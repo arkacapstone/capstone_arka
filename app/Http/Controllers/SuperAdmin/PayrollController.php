@@ -5,7 +5,9 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Payroll\ManagePayrollPeriod;
 use App\Enums\PayFrequency;
 use App\Enums\PayrollPeriodStatus;
+use App\Enums\PayrollStatus;
 use App\Http\Controllers\Controller;
+use App\Models\DeviceAssignment;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Services\Dashboard\Widgets\PayrollOverviewWidget;
@@ -58,7 +60,8 @@ class PayrollController extends Controller
             'tab' => $tab,
             'current' => (new PayrollOverviewWidget($current, $today))->data(),
             'periods' => $periods->all(),
-            'verification' => (new VerificationResultsWidget)->data(),
+            // View-only: the Admin already reviewed the contractors' changes.
+            'verification' => (new VerificationResultsWidget(withChanges: false))->data(),
             'frequencies' => $this->frequencies(),
             'suggested' => $current->exists ? null : [
                 'start_date' => $current->start_date->toDateString(),
@@ -98,6 +101,8 @@ class PayrollController extends Controller
 
     public function show(PayrollPeriod $period): Response
     {
+        $holdSuggestions = $this->holdSuggestions($period);
+
         $rows = $period->payrolls()
             ->with(['employee:id,name,employee_code,role', 'client:id,client_name', 'rate'])
             ->get()
@@ -125,17 +130,22 @@ class PayrollController extends Controller
                 'other' => (float) $row->other_deductions,
                 'net' => (float) $row->net_pay,
                 'status' => $row->status->value,
+                'heldAt' => $row->held_at?->toIso8601String(),
+                'holdReason' => $row->hold_reason,
+                'holdSuggestion' => $holdSuggestions[$row->employee_id] ?? null,
             ]);
 
         return Inertia::render('SuperAdmin/Payroll/Show', [
             'overview' => (new PayrollOverviewWidget($period, CarbonImmutable::today()))->data(),
             'rows' => $rows->all(),
             'canAdjust' => $period->status->allowsAdjustments(),
+            'canHold' => in_array($period->status, [PayrollPeriodStatus::Locked, PayrollPeriodStatus::Processed, PayrollPeriodStatus::Released], true),
             'canDelete' => $period->status === PayrollPeriodStatus::Open,
             'employeesPaid' => PayrollCalculator::ratesFor($period)->distinct()->count('employee_id'),
             'verification' => [
                 'verified' => $period->verifications()->whereNotNull('verified_at')->count(),
-                'fixed' => $period->verifications()->has('corrections')->count(),
+                'adminSubmittedAt' => $period->admin_submitted_at?->toIso8601String(),
+                'adminSubmittedBy' => $period->adminSubmitter?->name,
             ],
         ]);
     }
@@ -147,7 +157,7 @@ class PayrollController extends Controller
 
         return back()->with('success', match ($from) {
             PayrollPeriodStatus::Open => 'Attendance verification opened. Contractors have been notified.',
-            PayrollPeriodStatus::Verification => 'Attendance locked and draft payroll calculated. Contractors have been notified.',
+            PayrollPeriodStatus::Verification => 'Payroll processed: attendance locked and payroll calculated. Contractors have been notified.',
             PayrollPeriodStatus::Locked => 'Payroll approved.',
             default => 'Payslips released. Every contractor has been notified.',
         });
@@ -187,11 +197,46 @@ class PayrollController extends Controller
         return back()->with('success', 'Payroll row updated.');
     }
 
+    public function hold(Request $request, Payroll $payroll, ManagePayrollPeriod $manage): RedirectResponse
+    {
+        $validated = $request->validate(['hold_reason' => ['required', 'string', 'max:255']], attributes: ['hold_reason' => 'reason']);
+
+        $manage->hold($payroll, $validated['hold_reason']);
+
+        return back()->with('success', 'Payroll on hold. It stays out of the release until you lift the hold.');
+    }
+
+    public function releaseHold(Payroll $payroll, ManagePayrollPeriod $manage): RedirectResponse
+    {
+        $manage->releaseHold($payroll);
+
+        return back()->with('success', 'Hold lifted.');
+    }
+
     public function destroy(PayrollPeriod $period, ManagePayrollPeriod $manage): RedirectResponse
     {
         $manage->delete($period);
 
         return to_route('super-admin.payroll')->with('success', 'Payroll period deleted.');
+    }
+
+    /**
+     * Suggested holds (a suggestion only; the Super Admin decides): contractors with lost company
+     * equipment whose deduction has not been paid through a released payroll yet.
+     *
+     * @return array<int, string> reason by contractor id
+     */
+    private function holdSuggestions(PayrollPeriod $period): array
+    {
+        return DeviceAssignment::query()
+            ->where('status', DeviceAssignment::STATUS_LOST)
+            ->whereIn('employee_id', $period->payrolls()->select('employee_id'))
+            ->whereDoesntHave('deduction.payroll', fn ($query) => $query->where('status', PayrollStatus::Released))
+            ->with('device:id,device_name,serial_number')
+            ->get()
+            ->groupBy('employee_id')
+            ->map(fn ($assignments) => 'Lost company equipment: '.$assignments->map(fn (DeviceAssignment $assignment) => $assignment->device->device_name)->implode(', '))
+            ->all();
     }
 
     /**

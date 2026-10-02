@@ -4,6 +4,7 @@ const tabs = [
     { label: 'Admins', route: 'super-admin.workforce.admins.index', match: 'super-admin.workforce.admins.*' },
     { label: 'Contractors', route: 'super-admin.workforce.employees.index', match: 'super-admin.workforce.employees.*' },
     { label: 'Clients', route: 'super-admin.workforce.clients.index', match: 'super-admin.workforce.clients.*' },
+    { label: 'Devices', route: 'super-admin.workforce.devices.index', match: 'super-admin.workforce.devices.*' },
 ];
 
 export default function WorkforceTabs() {

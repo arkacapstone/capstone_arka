@@ -137,6 +137,52 @@ class SchedulingTest extends TestCase
         $this->assertDatabaseCount(Schedule::class, 2);
     }
 
+    public function test_a_schedule_has_at_most_five_working_days(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.store'), $this->payload(['working_days' => ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']]))
+            ->assertSessionHasErrors('working_days');
+
+        $this->assertDatabaseCount(Schedule::class, 0);
+    }
+
+    public function test_working_days_across_clients_cannot_exceed_five_a_week(): void
+    {
+        $other = Client::factory()->create(['client_name' => 'Northline']);
+        Rate::factory()->for($this->employee, 'employee')->for($other)->create();
+        Schedule::factory()->for($this->employee, 'employee')->for($other)->create(['working_days' => ['mon', 'tue', 'wed']]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.store'), $this->payload(['working_days' => ['thu', 'fri', 'sat']]))
+            ->assertSessionHasErrors(['working_days' => 'A contractor can be scheduled for at most 5 working days a week. This would make 6 days, together with: Northline (Mon, Tue, Wed).']);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.store'), $this->payload(['working_days' => ['wed', 'thu', 'fri']]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount(Schedule::class, 2);
+    }
+
+    public function test_a_schedule_cannot_start_or_change_in_the_past(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.store'), $this->payload(['start_date' => '2026-09-24']))
+            ->assertSessionHasErrors('start_date');
+
+        $schedule = Schedule::factory()->for($this->employee, 'employee')->for($this->client)->create(['start_date' => '2026-09-01']);
+
+        $this->actingAs($this->admin)
+            ->put(route('admin.scheduling.update', $schedule), [
+                ...collect($this->payload())->except(['employee_id', 'start_date'])->all(),
+                'effective_date' => '2026-09-24',
+            ])
+            ->assertSessionHasErrors('effective_date');
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.store'), $this->payload(['start_date' => '2026-09-25']))
+            ->assertSessionHasNoErrors();
+    }
+
     public function test_admin_deactivates_a_schedule(): void
     {
         $schedule = Schedule::factory()->for($this->employee, 'employee')->for($this->client)->create();

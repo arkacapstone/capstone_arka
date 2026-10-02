@@ -1,7 +1,6 @@
 import FixList from '@/Components/Attendance/FixList';
 import Dialog from '@/Components/Console/Dialog';
 import Field, { ConsoleButton, TextAreaField } from '@/Components/Console/Field';
-import FilePicker from '@/Components/Console/FilePicker';
 import Panel, { Eyebrow, PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge, { Tag } from '@/Components/Console/StatusBadge';
 import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon, ListIcon } from '@/Components/Icons';
@@ -14,75 +13,6 @@ import { Fragment, useMemo, useState } from 'react';
 
 const control =
     'rounded-none border border-console-line bg-console-panel py-2 pl-3 pr-9 text-sm text-console-text transition-colors hover:border-arka-aqua focus:border-arka-teal focus:ring-1 focus:ring-arka-teal';
-
-function CorrectionForm({ record, onDone }) {
-    const { data, setData, post, processing, errors } = useForm({
-        attendance_id: record?.id ?? '',
-        date: record?.date ?? todayIso(),
-        time_in: record?.timeIn ?? '',
-        time_out: record?.timeOut ?? '',
-        reason: '',
-        proof: null,
-    });
-
-    const submit = (e) => {
-        e.preventDefault();
-        post(route('employee.attendance.corrections.store'), {
-            forceFormData: true,
-            preserveScroll: true,
-            onSuccess: onDone,
-        });
-    };
-
-    return (
-        <form onSubmit={submit} className="flex flex-col gap-5">
-            {record ? (
-                <div className="border border-console-line bg-console-raised px-4 py-3 text-sm">
-                    <p className="font-medium text-console-heading">
-                        {fullDate(record.date)} · {record.client}
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-console-muted">
-                        Recorded: {record.timeInLabel ?? '—'} – {record.timeOutLabel ?? '—'}
-                    </p>
-                </div>
-            ) : (
-                <Field id="date" type="date" label="Date" max={todayIso()} value={data.date} onChange={(e) => setData('date', e.target.value)} error={errors.date} required />
-            )}
-            {record && errors.date && <p className="text-xs text-console-error">{errors.date}</p>}
-
-            <div className="grid grid-cols-2 gap-4">
-                <Field id="time_in" type="time" label="Correct time in" value={data.time_in} onChange={(e) => setData('time_in', e.target.value)} error={errors.time_in} />
-                <Field id="time_out" type="time" label="Correct time out" value={data.time_out} onChange={(e) => setData('time_out', e.target.value)} error={errors.time_out} />
-            </div>
-            <p className="-mt-2 text-xs text-console-muted">Fill in only what needs fixing — a missed clock-out just needs the time out.</p>
-
-            <TextAreaField
-                id="reason"
-                label="Reason"
-                value={data.reason}
-                onChange={(e) => setData('reason', e.target.value)}
-                error={errors.reason}
-                placeholder="e.g. Forgot to stop the timer after my shift."
-                required
-            />
-
-            <FilePicker
-                id="proof"
-                label="Proof (optional)"
-                hint="PDF, JPG or PNG · up to 10 MB"
-                accept=".pdf,.jpg,.jpeg,.png"
-                file={data.proof}
-                onChange={(file) => setData('proof', file)}
-                error={errors.proof}
-            />
-
-            <ConsoleButton type="submit" disabled={processing}>
-                Send correction request
-            </ConsoleButton>
-            <p className="text-xs text-console-muted">An Admin reviews it. Your attendance changes only once it's approved, and you'll get a notification either way.</p>
-        </form>
-    );
-}
 
 function VerificationFixForm({ periodId, record, onDone }) {
     const { data, setData, post, processing, errors } = useForm({
@@ -145,7 +75,7 @@ function VerificationPanel({ verification }) {
     const [fixing, setFixing] = useState(null);
     const [confirming, setConfirming] = useState(false);
     const [processing, setProcessing] = useState(false);
-    const { periodId, name, cutoffDate, verifiedAt, canFix: windowOpen, fixDeadline, fixes, records } = verification;
+    const { periodId, name, cutoffDate, verifiedAt, canFix: windowOpen, closed, fixDeadline, fixes, records } = verification;
     const canFix = !verifiedAt && windowOpen;
     const [expanded, setExpanded] = useState([]);
     const toggle = (id) => setExpanded((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]));
@@ -171,7 +101,15 @@ function VerificationPanel({ verification }) {
             <PanelHeading
                 title="Verify your attendance"
                 subtitle={`Payroll ${name} · submit before the ${fullDate(cutoffDate)} cutoff`}
-                action={verifiedAt ? <StatusBadge status="approved" label="Verified" /> : <ConsoleButton onClick={() => setConfirming(true)}>Submit as verified</ConsoleButton>}
+                action={
+                    verifiedAt ? (
+                        <StatusBadge status="approved" label="Verified" />
+                    ) : closed ? (
+                        <Tag tone="closed">Submitted by the Admin</Tag>
+                    ) : (
+                        <ConsoleButton onClick={() => setConfirming(true)}>Submit as verified</ConsoleButton>
+                    )
+                }
             />
 
             <p className="mt-4 text-sm text-console-muted">
@@ -179,7 +117,7 @@ function VerificationPanel({ verification }) {
                     ? `You submitted your attendance as verified on ${fullDate(verifiedAt.slice(0, 10))}.`
                     : canFix
                       ? `Check your time in and time out for each day. You can fix as many days as you need until ${dateTime(fixDeadline)}; each fix is saved right away. When everything is correct, submit your attendance as verified.`
-                      : `Fixing closed at ${dateTime(fixDeadline)}. If everything is correct, submit your attendance as verified; for anything else, request a correction from an Admin.`}
+                      : `Fixing closed at ${dateTime(fixDeadline)}. If everything is correct, submit your attendance as verified; for anything else, contact an Admin.`}
             </p>
 
             <div className="mt-6">
@@ -271,7 +209,7 @@ function VerificationPanel({ verification }) {
     );
 }
 
-function CalendarView({ month, records, onFix }) {
+function CalendarView({ month, records }) {
     const byDate = useMemo(() => {
         const map = {};
         records.forEach((record) => (map[record.date] ??= []).push(record));
@@ -298,15 +236,9 @@ function CalendarView({ month, records, onFix }) {
                                 <p className="font-mono text-xs text-console-muted">{Number(date.slice(-2))}</p>
                                 <div className="mt-1 flex flex-col gap-1">
                                     {(byDate[date] ?? []).map((record) => (
-                                        <button
-                                            key={record.id}
-                                            type="button"
-                                            onClick={() => !record.locked && onFix(record)}
-                                            title={`${record.client} · ${record.statusLabel}`}
-                                            className="text-left"
-                                        >
+                                        <span key={record.id} title={`${record.client} · ${record.statusLabel}`}>
                                             <StatusBadge status={record.status} label={record.statusLabel} />
-                                        </button>
+                                        </span>
                                     ))}
                                 </div>
                             </>
@@ -321,7 +253,6 @@ function CalendarView({ month, records, onFix }) {
 function AttendanceTabs({ tab, onChange, verification }) {
     const tabs = [
         ['history', 'Attendance history'],
-        ['corrections', 'Correction requests'],
         ['verification', 'Payroll verification'],
     ];
 
@@ -347,9 +278,8 @@ function AttendanceTabs({ tab, onChange, verification }) {
     );
 }
 
-export default function Attendance({ month, summary, records, corrections, filters, tab, verification }) {
+export default function Attendance({ month, summary, records, tab, verification }) {
     const [view, setView] = useState('table');
-    const [fixing, setFixing] = useState(null); // null = closed, {} = new request, record = fix this
 
     // The tab lives in the URL so it survives saving a fix and can be linked from notifications.
     const visit = (params) =>
@@ -358,7 +288,6 @@ export default function Attendance({ month, summary, records, corrections, filte
             {
                 month,
                 tab,
-                ...(filters.status ? { status: filters.status } : {}),
                 ...params,
             },
             { preserveScroll: true, preserveState: true, replace: true },
@@ -396,7 +325,6 @@ export default function Attendance({ month, summary, records, corrections, filte
                             <PanelHeading
                                 title="Attendance history"
                                 subtitle={monthLabel(month)}
-                                action={<ConsoleButton onClick={() => setFixing({})}>Request correction</ConsoleButton>}
                             />
 
                             <div className="mb-5 mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -448,7 +376,8 @@ export default function Attendance({ month, summary, records, corrections, filte
 
                             {view === 'table' ? (
                                 <Table
-                                    columns={['Date', 'Client', 'Time in', 'Time out', 'Hours', 'Status', 'Action']}
+                                    columns={['Date', 'Client', 'Time in', 'Time out', 'Hours', 'Status']}
+                                    actions={false}
                                     isEmpty={records.length === 0}
                                     emptyMessage="No attendance recorded this month."
                                 >
@@ -462,76 +391,14 @@ export default function Attendance({ month, summary, records, corrections, filte
                                             <Cell>
                                                 <StatusBadge status={record.status} label={record.statusLabel} />
                                             </Cell>
-                                            <td className="py-3 text-right align-top">
-                                                {record.locked ? (
-                                                    <span className="px-2 text-xs text-console-dim">Locked for payroll</span>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFixing(record)}
-                                                        className="px-2 py-1 text-xs font-medium text-arka-teal hover:bg-console-raised"
-                                                    >
-                                                        Fix this
-                                                    </button>
-                                                )}
-                                            </td>
                                         </Row>
                                     ))}
                                 </Table>
                             ) : (
-                                <CalendarView month={month} records={records} onFix={setFixing} />
+                                <CalendarView month={month} records={records} />
                             )}
                         </Panel>
                     </>
-                )}
-
-                {tab === 'corrections' && (
-                    <Panel>
-                        <PanelHeading
-                            title="My correction requests"
-                            subtitle="Requests stay here until they're decided, so you never have to ask what happened."
-                            action={
-                                <select
-                                    aria-label="Filter by status"
-                                    value={filters.status}
-                                    onChange={(e) =>
-                                        visit({
-                                            status: e.target.value || undefined,
-                                        })
-                                    }
-                                    className={control}
-                                >
-                                    <option value="">All statuses</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
-                            }
-                        />
-                        <div className="mt-6">
-                            <Table
-                                columns={['Date', 'Field corrected', 'Requested change', 'Reason', 'Status']}
-                                actions={false}
-                                isEmpty={corrections.length === 0}
-                                emptyMessage="No correction requests yet."
-                            >
-                                {corrections.map((correction) => (
-                                    <Row key={correction.id}>
-                                        <Cell className="font-mono">{fullDate(correction.date)}</Cell>
-                                        <Cell>{correction.field}</Cell>
-                                        <Cell className="font-mono">{correction.requested}</Cell>
-                                        <Cell className="max-w-sm text-console-muted">
-                                            {correction.reason}
-                                            {correction.remarks && <p className="mt-1 text-xs text-console-dim">Admin: {correction.remarks}</p>}
-                                        </Cell>
-                                        <Cell>
-                                            <StatusBadge status={correction.status} label={correction.status === 'rejected' ? 'Closed' : undefined} />
-                                        </Cell>
-                                    </Row>
-                                ))}
-                            </Table>
-                        </div>
-                    </Panel>
                 )}
 
                 {tab === 'verification' &&
@@ -548,15 +415,6 @@ export default function Attendance({ month, summary, records, corrections, filte
                     ))}
             </div>
 
-            <Dialog
-                open={fixing !== null}
-                onClose={() => setFixing(null)}
-                side
-                title={fixing?.id ? 'Fix this day' : 'Request correction'}
-                description="A lightweight request — not an incident."
-            >
-                {fixing !== null && <CorrectionForm key={fixing.id ?? 'new'} record={fixing.id ? fixing : null} onDone={() => setFixing(null)} />}
-            </Dialog>
         </AppLayout>
     );
 }

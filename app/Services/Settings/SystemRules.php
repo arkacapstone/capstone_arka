@@ -39,8 +39,7 @@ class SystemRules
             'absence_deductions_enabled' => ['table' => self::PAYROLL, 'group' => 'deductions', 'label' => 'Deduct absences and unpaid leave', 'type' => 'boolean', 'default' => true, 'description' => 'Daily rate × days absent. Every scheduled working day not worked counts, including days with no attendance (e.g. after a contractor leaves mid-period). Paid leave is never deducted.'],
             'late_deductions_enabled' => ['table' => self::PAYROLL, 'group' => 'deductions', 'label' => 'Deduct late and undertime', 'type' => 'boolean', 'default' => true, 'description' => 'Hourly rate × late/undertime hours. There is no grace period.'],
 
-            // Device loss / damage
-            'device_deduction_cap' => ['table' => self::PAYROLL, 'group' => 'deductions', 'label' => 'Device deduction cap per payroll (₱)', 'type' => 'decimal', 'default' => 0, 'min' => 0, 'max' => 1000000, 'description' => 'Most that approved device loss/damage deductions may take from one payroll. 0 means no cap.'],
+            // Device loss: no fixed amount or cap. A lost device is deducted at its own value (Workforce → Devices).
 
             // Cash advance deduction rules
             'cash_advance_max_amount' => ['table' => self::PAYROLL, 'group' => 'cash_advances', 'label' => 'Maximum cash advance (₱)', 'type' => 'decimal', 'default' => 10000, 'min' => 0, 'max' => 10000000, 'description' => 'Largest single cash advance that can be requested.'],

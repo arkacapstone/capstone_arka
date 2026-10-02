@@ -2,6 +2,8 @@
 
 namespace App\Services\Dashboard\Widgets;
 
+use App\Actions\Attendance\ReviewPeriodVerification;
+use App\Enums\PayrollPeriodStatus;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceVerification;
 use App\Models\PayrollPeriod;
@@ -11,11 +13,16 @@ use App\Services\Dashboard\Contracts\DashboardWidget;
 use App\Services\Payroll\PayrollCalculator;
 
 /**
- * Payroll attendance verification results for the most recently opened period: which contractors
- * submitted their attendance as verified, and every day they fixed with the time it replaced.
+ * Payroll attendance verification for the most recently opened period.
+ *
+ * The Admin reviews it: every contractor, every day they fixed with the time it replaced, and the
+ * reminder / submit actions. The Super Admin only sees who has submitted (view-only), because the
+ * changes were already reviewed by the Admin.
  */
 class VerificationResultsWidget implements DashboardWidget
 {
+    public function __construct(private readonly bool $withChanges = true) {}
+
     public function key(): string
     {
         return 'verification';
@@ -26,19 +33,19 @@ class VerificationResultsWidget implements DashboardWidget
      */
     public function data(): array
     {
-        $period = PayrollPeriod::query()->whereNotNull('verification_opened_at')->latest('verification_opened_at')->first();
+        $period = PayrollPeriod::query()->with('adminSubmitter:id,name')->whereNotNull('verification_opened_at')->latest('verification_opened_at')->first();
 
         if ($period === null) {
             return ['period' => null, 'counts' => null, 'contractors' => []];
         }
 
         $verifications = AttendanceVerification::query()
-            ->with('corrections.attendance.client:id,client_name')
+            ->when($this->withChanges, fn ($query) => $query->with('corrections.attendance.client:id,client_name'))
             ->where('period_id', $period->id)
             ->get()
             ->keyBy('employee_id');
 
-        $contractors = PayrollCalculator::employeesFor($period)
+        $everyone = PayrollCalculator::employeesFor($period)
             ->map(function (User $contractor) use ($verifications) {
                 $verification = $verifications->get($contractor->id);
 
@@ -47,12 +54,18 @@ class VerificationResultsWidget implements DashboardWidget
                     'name' => $contractor->name,
                     'code' => $contractor->employee_code,
                     'verifiedAt' => $verification?->verified_at?->toIso8601String(),
-                    'fixes' => $verification?->corrections->map(fn (AttendanceCorrection $correction) => FixHistory::present($correction))->all() ?? [],
+                    ...($this->withChanges
+                        ? ['fixes' => $verification?->corrections->map(fn (AttendanceCorrection $correction) => FixHistory::present($correction))->all() ?? []]
+                        : []),
                 ];
             })
             // Verified first (latest on top), then those still to verify by name.
             ->sortBy([fn (array $a, array $b) => ($b['verifiedAt'] ?? '') <=> ($a['verifiedAt'] ?? ''), ['name', 'asc']])
             ->values();
+
+        $inVerification = $period->status === PayrollPeriodStatus::Verification && ! $period->isSubmittedByAdmin();
+        $blocker = ReviewPeriodVerification::submitBlocker($period);
+        $waiting = $everyone->whereNull('verifiedAt')->count();
 
         return [
             'period' => [
@@ -63,14 +76,27 @@ class VerificationResultsWidget implements DashboardWidget
                 'openedAt' => $period->verification_opened_at->toIso8601String(),
                 'fixDeadline' => $period->fixDeadline()->toIso8601String(),
                 'fixWindowOpen' => $period->fixWindowOpen(),
+                'adminSubmittedAt' => $period->admin_submitted_at?->toIso8601String(),
+                'adminSubmittedBy' => $period->adminSubmitter?->name,
+                ...($this->withChanges ? [
+                    'lastRemindedAt' => $period->last_reminded_at?->toIso8601String(),
+                    'lastRemindedCount' => $period->last_reminded_count,
+                    'canRemind' => $inVerification && $waiting > 0,
+                    'canSubmit' => $blocker === null,
+                    'submitBlocker' => $inVerification ? $blocker : null,
+                ] : []),
             ],
             'counts' => [
-                'total' => $contractors->count(),
-                'verified' => $contractors->whereNotNull('verifiedAt')->count(),
-                'fixed' => $contractors->filter(fn (array $row) => $row['fixes'] !== [])->count(),
-                'fixes' => $contractors->sum(fn (array $row) => count($row['fixes'])),
+                'total' => $everyone->count(),
+                'verified' => $everyone->count() - $waiting,
+                'waiting' => $waiting,
+                ...($this->withChanges ? [
+                    'fixed' => $everyone->filter(fn (array $row) => $row['fixes'] !== [])->count(),
+                    'fixes' => $everyone->sum(fn (array $row) => count($row['fixes'])),
+                ] : []),
             ],
-            'contractors' => $contractors->all(),
+            // The Super Admin's view lists only those who already submitted.
+            'contractors' => ($this->withChanges ? $everyone : $everyone->whereNotNull('verifiedAt')->values())->all(),
         ];
     }
 }

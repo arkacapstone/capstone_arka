@@ -8,6 +8,7 @@ use App\Services\Dashboard\Widgets\Admin\EmployeeOverviewWidget;
 use App\Services\Dashboard\Widgets\Admin\IncompleteAttendanceWidget;
 use App\Services\Dashboard\Widgets\Admin\PendingDevotionalsWidget;
 use App\Services\Dashboard\Widgets\Admin\TodayAttendanceWidget;
+use App\Services\Dashboard\Widgets\VerificationResultsWidget;
 use Carbon\CarbonImmutable;
 
 /**
@@ -32,6 +33,8 @@ class AdminDashboard
             new IncompleteAttendanceWidget($today),
             new ActiveSchedulesWidget($now),
             new PendingDevotionalsWidget($today),
+            // Period verification: the Admin reviews the contractors' changes and submits the period.
+            new VerificationResultsWidget,
         ];
 
         foreach ($widgets as $widget) {
@@ -51,6 +54,10 @@ class AdminDashboard
     private function summary(array $data): string
     {
         $parts = [];
+
+        if (($data['verification']['period']['canSubmit'] ?? false) === true) {
+            $parts[] = 'A verified payroll period is ready to submit to the Super Admin.';
+        }
 
         if ($data['incomplete']['total'] > 0) {
             $count = $data['incomplete']['total'];

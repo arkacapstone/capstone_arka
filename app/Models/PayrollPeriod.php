@@ -10,9 +10,10 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['period_name', 'start_date', 'end_date', 'cutoff_date', 'release_date', 'pay_frequency', 'status', 'verification_opened_at'])]
+#[Fillable(['period_name', 'start_date', 'end_date', 'cutoff_date', 'release_date', 'pay_frequency', 'status', 'verification_opened_at', 'admin_submitted_at', 'admin_submitted_by', 'last_reminded_at', 'last_reminded_count'])]
 class PayrollPeriod extends Model
 {
     use HasFactory;
@@ -27,7 +28,28 @@ class PayrollPeriod extends Model
             'pay_frequency' => PayFrequency::class,
             'status' => PayrollPeriodStatus::class,
             'verification_opened_at' => 'immutable_datetime',
+            'admin_submitted_at' => 'immutable_datetime',
+            'last_reminded_at' => 'immutable_datetime',
+            'last_reminded_count' => 'integer',
         ];
+    }
+
+    /**
+     * The Admin who reviewed the contractors' changes and submitted the verified period.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function adminSubmitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_submitted_by');
+    }
+
+    /**
+     * The Super Admin can process payroll only after the Admin submitted the verified period.
+     */
+    public function isSubmittedByAdmin(): bool
+    {
+        return $this->admin_submitted_at !== null;
     }
 
     /**

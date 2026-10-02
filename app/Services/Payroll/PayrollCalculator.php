@@ -142,7 +142,7 @@ class PayrollCalculator
         $row->absence_deduction = $this->rules->enabled('absence_deductions_enabled') ? round($rate->dailyRate() * (float) $row->days_absent, 2) : 0;
         $row->late_deduction = $this->rules->enabled('late_deductions_enabled') ? round($hourly * $row->late_minutes / 60, 2) : 0;
 
-        $row->net_pay = round(  
+        $row->net_pay = round(
             (float) $row->gross_pay
             + (float) $row->additional_pay
             + (float) ($row->overtime_amount ?? 0)
@@ -287,13 +287,12 @@ class PayrollCalculator
 
     /**
      * Per-employee deductions go on the contractor's first row: approved device loss/damage
-     * deductions not yet charged (capped by System & Rules), and every outstanding cash advance
+     * deductions not yet charged (each at the lost device's value), and every outstanding cash advance
      * in full (given before payday, deducted all at once). A reviewed row keeps its manual amount.
      */
     private function applyEmployeeDeductions(PayrollPeriod $period): void
     {
         $rows = $period->payrolls()->with('rate')->orderBy('id')->get()->groupBy('employee_id');
-        $cap = $this->rules->decimal('device_deduction_cap');
 
         foreach ($rows as $employeeId => $employeeRows) {
             $first = $employeeRows->first();
@@ -315,8 +314,8 @@ class PayrollCalculator
             $outstanding = (float) CashAdvance::query()->outstanding()->where('employee_id', $employeeId)->sum('remaining_balance');
 
             foreach ($employeeRows as $row) {
-                $device = (float) DeviceDeduction::query()->where('payroll_id', $row->id)->sum('amount');
-                $row->device_deduction = $cap > 0 ? min($device, $cap) : $device;
+                // Each lost device is deducted at its own value, never capped to a fixed amount.
+                $row->device_deduction = round((float) DeviceDeduction::query()->where('payroll_id', $row->id)->sum('amount'), 2);
                 $row->reward_amount = round((float) Reward::query()->where('payroll_id', $row->id)->sum('amount'), 2);
 
                 if ($row->status !== PayrollStatus::Reviewed) {

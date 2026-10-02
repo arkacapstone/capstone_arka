@@ -3,7 +3,6 @@
 namespace Tests\Feature\Admin;
 
 use App\Enums\AttendanceStatus;
-use App\Enums\CorrectionStatus;
 use App\Enums\PayrollPeriodStatus;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
@@ -103,57 +102,5 @@ class AttendanceManagementTest extends TestCase
             ->assertSessionHasErrors('time_in');
 
         $this->assertDatabaseCount(AttendanceCorrection::class, 0);
-    }
-
-    public function test_approving_an_employee_request_applies_it(): void
-    {
-        Notification::fake();
-
-        $attendance = Attendance::factory()->for($this->employee, 'employee')->for($this->client)->create([
-            'date' => '2026-09-24',
-            'time_in' => '2026-09-24 09:00:00',
-            'status' => AttendanceStatus::Incomplete,
-        ]);
-        $request = AttendanceCorrection::factory()->for($this->employee, 'employee')->create([
-            'attendance_id' => $attendance->id,
-            'date' => '2026-09-24',
-            'requested_time_out' => '18:00',
-        ]);
-
-        $this->actingAs($this->admin)
-            ->post(route('admin.attendance.requests.approve', $request))
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(CorrectionStatus::Approved, $request->refresh()->status);
-        $this->assertSame(AttendanceStatus::Present, $attendance->refresh()->status);
-        Notification::assertSentTo($this->employee, AttendanceCorrected::class);
-    }
-
-    public function test_closing_a_request_needs_remarks_and_leaves_attendance_unchanged(): void
-    {
-        $request = AttendanceCorrection::factory()->for($this->employee, 'employee')->create(['date' => '2026-09-24']);
-
-        $this->actingAs($this->admin)
-            ->post(route('admin.attendance.requests.reject', $request))
-            ->assertSessionHasErrors('remarks');
-
-        $this->actingAs($this->admin)
-            ->post(route('admin.attendance.requests.reject', $request), ['remarks' => 'The activity log shows no work that day.'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(CorrectionStatus::Rejected, $request->refresh()->status);
-        $this->assertDatabaseCount(Attendance::class, 0);
-    }
-
-    public function test_a_request_can_only_be_reviewed_once(): void
-    {
-        $request = AttendanceCorrection::factory()->for($this->employee, 'employee')->create([
-            'date' => '2026-09-24',
-            'status' => CorrectionStatus::Rejected,
-        ]);
-
-        $this->actingAs($this->admin)
-            ->post(route('admin.attendance.requests.approve', $request))
-            ->assertSessionHasErrors('status');
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Actions\Scheduling;
 
 use App\Enums\EmploymentType;
+use App\Enums\Weekday;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Notifications\ScheduleChanged;
@@ -38,6 +39,7 @@ class SaveSchedule
     public function create(array $attributes): array
     {
         $this->ensureClientAssigned($attributes);
+        $this->ensureWorkWeekLimit($attributes['employee_id'], $attributes['working_days'], CarbonImmutable::parse($attributes['start_date']), $this->endDate($attributes));
         $attributes = $this->withShiftLength($attributes);
 
         $schedule = Schedule::create([...$attributes, 'status' => Schedule::STATUS_ACTIVE]);
@@ -59,6 +61,8 @@ class SaveSchedule
         $attributes['employee_id'] = $current->employee_id;
 
         $this->ensureClientAssigned($attributes);
+        // The schedule being changed is replaced from the effective date, so it never counts against the limit.
+        $this->ensureWorkWeekLimit($current->employee_id, $attributes['working_days'], $effective->max($current->start_date), $this->endDate($attributes), ignore: $current);
         $attributes = $this->withShiftLength($attributes);
 
         $schedule = DB::transaction(function () use ($current, $attributes, $effective) {
@@ -124,6 +128,44 @@ class SaveSchedule
                 'client_id' => 'This contractor is not assigned to that client yet. The Super Admin approves client assignments first.',
             ]);
         }
+    }
+
+    /**
+     * A contractor works at most five days a week across all their clients: the working days of
+     * this schedule plus those of every other active schedule in effect at the same time.
+     *
+     * @param  list<string>  $workingDays
+     */
+    private function ensureWorkWeekLimit(int $employeeId, array $workingDays, CarbonImmutable $from, ?CarbonImmutable $to, ?Schedule $ignore = null): void
+    {
+        $others = Schedule::query()
+            ->with('client:id,client_name')
+            ->where('employee_id', $employeeId)
+            ->active()
+            ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
+            ->when($to, fn ($query) => $query->whereDate('start_date', '<=', $to))
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $from))
+            ->get();
+
+        $days = collect($workingDays)->merge($others->flatMap(fn (Schedule $schedule) => $schedule->working_days ?? []))->unique();
+
+        if ($days->count() <= Schedule::MAX_WORKING_DAYS) {
+            return;
+        }
+
+        $existing = $others->map(fn (Schedule $schedule) => $schedule->client->client_name.' ('.collect($schedule->working_days)->map(fn (string $day) => Weekday::from($day)->short())->implode(', ').')')->implode('; ');
+
+        throw ValidationException::withMessages([
+            'working_days' => 'A contractor can be scheduled for at most '.Schedule::MAX_WORKING_DAYS." working days a week. This would make {$days->count()} days, together with: {$existing}.",
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function endDate(array $attributes): ?CarbonImmutable
+    {
+        return filled($attributes['end_date'] ?? null) ? CarbonImmutable::parse($attributes['end_date']) : null;
     }
 
     /**

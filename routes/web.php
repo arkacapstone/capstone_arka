@@ -19,6 +19,7 @@ use App\Http\Controllers\SuperAdmin\RequestController;
 use App\Http\Controllers\SuperAdmin\RuleController;
 use App\Http\Controllers\SuperAdmin\Workforce\AdminController;
 use App\Http\Controllers\SuperAdmin\Workforce\ClientController;
+use App\Http\Controllers\SuperAdmin\Workforce\DeviceController;
 use App\Http\Controllers\SuperAdmin\Workforce\EmployeeController;
 use App\Http\Controllers\SuperAdmin\Workforce\EmployeeRateController;
 use App\Http\Controllers\ViewModeController;
@@ -77,6 +78,16 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
         // View-only: Admins add clients; the Super Admin approves assignments in Requests & Approvals.
         Route::get('workforce/clients', [ClientController::class, 'index'])->name('workforce.clients.index');
 
+        // Company equipment; a lost device is deducted at its own value.
+        Route::prefix('workforce/devices')->name('workforce.devices.')->controller(DeviceController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('{device}', 'update')->name('update');
+            Route::post('{device}/assign', 'assign')->name('assign');
+            Route::post('{device}/returned', 'returned')->name('returned');
+            Route::post('{device}/lost', 'lost')->name('lost');
+        });
+
         Route::get('payroll', [PayrollController::class, 'index'])->name('payroll');
         Route::prefix('payroll')->name('payroll.')->controller(PayrollController::class)->group(function () {
             Route::post('periods', 'store')->name('store');
@@ -85,6 +96,8 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
             Route::post('periods/{period}/revert', 'revert')->name('revert');
             Route::delete('periods/{period}', 'destroy')->name('destroy');
             Route::patch('rows/{payroll}', 'adjust')->name('adjust');
+            Route::post('rows/{payroll}/hold', 'hold')->name('hold');
+            Route::delete('rows/{payroll}/hold', 'releaseHold')->name('hold.release');
         });
 
         Route::get('payslips', SuperAdminPayslipController::class)->name('payslips');

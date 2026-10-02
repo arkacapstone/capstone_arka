@@ -39,7 +39,6 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::Employee->value.','.Use
 
         Route::prefix('attendance')->name('attendance.')->controller(AttendanceController::class)->group(function () {
             Route::get('/', 'index')->name('index');
-            Route::post('corrections', 'requestCorrection')->name('corrections.store');
             Route::post('verification/{period}/fix', 'verificationFix')->name('verification.fix');
             Route::post('verification/{period}/submit', 'verificationSubmit')->name('verification.submit');
         });

@@ -115,8 +115,7 @@ function AttendanceCard({ attendance }) {
             </dl>
 
             <p className="mt-6 font-mono text-xs text-console-muted">
-                {attendance.clockedIn} clocked in · {attendance.missingClockOut} missing clock-out · {attendance.correctionsPending} corrections
-                pending
+                {attendance.clockedIn} clocked in · {attendance.missingClockOut} missing clock-out
             </p>
         </Panel>
     );

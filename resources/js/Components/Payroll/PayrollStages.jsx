@@ -123,7 +123,11 @@ export function StageActions({ overview, showDescription = true }) {
             )}
             <div className="flex flex-wrap gap-2">
                 {action.revertLabel && <SecondaryButton onClick={() => setConfirming('revert')}>{action.revertLabel}</SecondaryButton>}
-                {action.label && <ConsoleButton onClick={() => setConfirming('advance')}>{action.label}</ConsoleButton>}
+                {action.label && (
+                    <ConsoleButton onClick={() => setConfirming('advance')} disabled={Boolean(action.blocked)} title={action.blocked ?? undefined}>
+                        {action.label}
+                    </ConsoleButton>
+                )}
             </div>
 
             <StageConfirm

@@ -78,7 +78,6 @@ export default function TimeHistory({ days, filters, clients, statuses }) {
                                 date={day.date}
                                 sessions={day.sessions}
                                 fixes={day.fixes}
-                                correctionPending={day.correctionPending}
                                 defaultOpen={index === 0 && days.meta.current_page === 1}
                             />
                         ))}

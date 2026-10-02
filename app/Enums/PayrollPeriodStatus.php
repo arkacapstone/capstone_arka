@@ -4,7 +4,8 @@ namespace App\Enums;
 
 /**
  * Lifecycle of a payroll period (Blueprint §14):
- * Period open → Attendance verification → Attendance lock → Super Admin review & approval → Salary release.
+ * Period open → Attendance verification (contractors fix once, the Admin reviews and submits the verified
+ * period) → Payroll processed by the Super Admin (attendance locked) → Approval → Salary release.
  */
 enum PayrollPeriodStatus: string
 {
@@ -66,7 +67,7 @@ enum PayrollPeriodStatus: string
     {
         return match ($this) {
             self::Open => 'Open attendance verification',
-            self::Verification => 'Lock attendance & calculate payroll',
+            self::Verification => 'Process payroll',
             self::Locked => 'Approve payroll',
             self::Processed => 'Release payslips',
             self::Released => null,
@@ -79,8 +80,8 @@ enum PayrollPeriodStatus: string
     public function actionDescription(): ?string
     {
         return match ($this) {
-            self::Open => 'Contractors will be notified to review and confirm their attendance.',
-            self::Verification => 'Attendance is locked and draft payroll is calculated for every active rate.',
+            self::Open => 'Contractors will be notified to review and confirm their attendance. The Admin reviews their changes and submits the verified period to you.',
+            self::Verification => 'The Admin has submitted the verified period. Attendance is locked and payroll is calculated for every active rate.',
             self::Locked => 'Every payroll row is approved. Adjustments are no longer possible after this.',
             self::Processed => 'Payslips become visible to contractors and each one is notified.',
             self::Released => null,
@@ -101,7 +102,7 @@ enum PayrollPeriodStatus: string
     public function revertDescription(): ?string
     {
         return match ($this) {
-            self::Locked => 'Attendance reopens for corrections and the draft payroll is cleared. Contractors are notified.',
+            self::Locked => 'Attendance reopens for corrections and the draft payroll is cleared. Contractors are notified, and the Admin submits the verified period again.',
             default => null,
         };
     }

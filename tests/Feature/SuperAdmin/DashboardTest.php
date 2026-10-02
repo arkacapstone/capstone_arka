@@ -5,7 +5,6 @@ namespace Tests\Feature\SuperAdmin;
 use App\Enums\AttendanceStatus;
 use App\Enums\PayrollPeriodStatus;
 use App\Models\Attendance;
-use App\Models\AttendanceCorrection;
 use App\Models\CashAdvance;
 use App\Models\Client;
 use App\Models\LeaveRequest;
@@ -118,7 +117,6 @@ class DashboardTest extends TestCase
 
         TimeLog::factory()->for($employees[0], 'employee')->for($client)->create();
         TimeLog::factory()->for($employees[4], 'employee')->for($client)->forgotten()->create();
-        AttendanceCorrection::factory()->for($employees[4], 'employee')->create();
 
         $this->actingAs(User::factory()->superAdmin()->create())
             ->get(route('super-admin.dashboard'))
@@ -131,7 +129,6 @@ class DashboardTest extends TestCase
                 ->where('attendance.breakdown.4.count', 1)
                 ->where('attendance.clockedIn', 1)
                 ->where('attendance.missingClockOut', 1)
-                ->where('attendance.correctionsPending', 1)
                 ->where('alerts', fn ($alerts) => collect($alerts)->pluck('title')->contains('Missing clock-outs'))
             );
     }

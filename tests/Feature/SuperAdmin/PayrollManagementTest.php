@@ -61,6 +61,11 @@ class PayrollManagementTest extends TestCase
 
     private function advance(): void
     {
+        // Payroll is processed only after the Admin submits the verified period.
+        if ($this->period->status === PayrollPeriodStatus::Verification) {
+            $this->period->update(['admin_submitted_at' => now()]);
+        }
+
         $this->actingAs($this->superAdmin)
             ->post(route('super-admin.payroll.advance', $this->period))
             ->assertSessionHasNoErrors();

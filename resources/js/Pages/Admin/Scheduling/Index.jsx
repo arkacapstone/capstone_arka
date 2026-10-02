@@ -24,6 +24,9 @@ function addHours(start, hours) {
 
 const typeLabels = { full_time: 'Full-Time', part_time: 'Part-Time' };
 
+/** A contractor works at most five days a week, across all their clients. */
+const MAX_WORKING_DAYS = 5;
+
 function expectedHours(start, end) {
     if (!start || !end) return null;
 
@@ -32,6 +35,29 @@ function expectedHours(start, end) {
     if (minutes <= 0) minutes += 1440;
 
     return { hours: (minutes / 60).toFixed(2).replace(/\.00$/, ''), overnight: toMinutes(end) <= toMinutes(start) };
+}
+
+/** The week at a glance: each day is filled when the contractor works it. */
+function WeekStrip({ days, weekdays }) {
+    return (
+        <div className="flex gap-1" aria-label={`Works ${days.length} days: ${days.join(', ')}`}>
+            {weekdays.map((day) => {
+                const on = days.includes(day.value);
+
+                return (
+                    <span
+                        key={day.value}
+                        title={day.label}
+                        className={`flex h-6 w-7 items-center justify-center border font-mono text-[10px] uppercase ${
+                            on ? 'border-arka-teal bg-arka-teal text-white' : 'border-console-line text-console-dim'
+                        }`}
+                    >
+                        {day.label.slice(0, 2)}
+                    </span>
+                );
+            })}
+        </div>
+    );
 }
 
 function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, preselectEmployee, preselectClient, onDone }) {
@@ -67,8 +93,14 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
         }
     }, [fixedHours, data.start_time]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const toggleDay = (day) =>
-        setData('working_days', data.working_days.includes(day) ? data.working_days.filter((value) => value !== day) : [...data.working_days, day]);
+    const toggleDay = (day) => {
+        if (data.working_days.includes(day)) {
+            setData('working_days', data.working_days.filter((value) => value !== day));
+        } else if (data.working_days.length < MAX_WORKING_DAYS) {
+            setData('working_days', [...data.working_days, day]);
+        }
+    };
+    const dayLimitReached = data.working_days.length >= MAX_WORKING_DAYS;
 
     const hours = expectedHours(data.start_time, data.end_time);
 
@@ -124,14 +156,16 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
                 <div className="mt-2 flex flex-wrap gap-1.5">
                     {weekdays.map((day) => {
                         const on = data.working_days.includes(day.value);
+                        const blocked = !on && dayLimitReached;
 
                         return (
                             <button
                                 key={day.value}
                                 type="button"
                                 aria-pressed={on}
+                                disabled={blocked}
                                 onClick={() => toggleDay(day.value)}
-                                className={`w-12 border py-1.5 text-sm transition-colors ${
+                                className={`w-12 border py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                                     on ? 'border-arka-teal bg-arka-teal text-white' : 'border-console-line text-console-muted hover:border-arka-teal hover:text-arka-teal'
                                 }`}
                             >
@@ -140,6 +174,9 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
                         );
                     })}
                 </div>
+                <p className="mt-2 text-xs text-console-muted">
+                    {data.working_days.length} of {MAX_WORKING_DAYS} days · a contractor works at most {MAX_WORKING_DAYS} days a week, across all their clients.
+                </p>
                 {errors.working_days && <p className="mt-2 text-xs text-console-error">{errors.working_days}</p>}
             </fieldset>
 
@@ -185,15 +222,24 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
                         id="effective_date"
                         type="date"
                         label="Effective from"
+                        min={todayIso()}
                         value={data.effective_date}
                         onChange={(e) => setData('effective_date', e.target.value)}
                         error={errors.effective_date}
                         required
                     />
                 ) : (
-                    <Field id="start_date" type="date" label="Start date" value={data.start_date} onChange={(e) => setData('start_date', e.target.value)} error={errors.start_date} required />
+                    <Field id="start_date" type="date" label="Start date" min={todayIso()} value={data.start_date} onChange={(e) => setData('start_date', e.target.value)} error={errors.start_date} required />
                 )}
-                <Field id="end_date" type="date" label="End date (optional)" value={data.end_date} onChange={(e) => setData('end_date', e.target.value)} error={errors.end_date} />
+                <Field
+                    id="end_date"
+                    type="date"
+                    label="End date (optional)"
+                    min={(changing ? data.effective_date : data.start_date) || todayIso()}
+                    value={data.end_date}
+                    onChange={(e) => setData('end_date', e.target.value)}
+                    error={errors.end_date}
+                />
             </div>
 
             <div className="flex items-center gap-3">
@@ -242,8 +288,10 @@ export default function Index({ schedules, filters, employees, clients, weekdays
                         action={<ConsoleButton onClick={() => setForm({})}>Add schedule</ConsoleButton>}
                     />
 
-                    <div className="mb-5 mt-6 flex flex-wrap gap-3">
-                        <SearchInput value={search} onChange={setSearch} placeholder="Search contractor or ID…" label="Search schedules" />
+                    <div className="mb-5 mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                        <div className="sm:min-w-[260px] sm:flex-1">
+                            <SearchInput value={search} onChange={setSearch} placeholder="Search contractor or ID…" label="Search schedules" />
+                        </div>
                         <select aria-label="Filter by client" value={filters.client} onChange={(e) => apply({ client: e.target.value })} className={filterSelect}>
                             <option value="">All clients</option>
                             {clients.map((client) => (
@@ -269,10 +317,10 @@ export default function Index({ schedules, filters, employees, clients, weekdays
                     </div>
 
                     <Table
-                        columns={['Contractor', 'Client', 'Working days', 'Start', 'End', 'Break', 'Status', 'Actions']}
+                        columns={['Contractor', 'Client', 'Working days', 'Shift', 'In effect', 'Status', 'Actions']}
                         isEmpty={schedules.data.length === 0}
                         emptyMessage="No schedules match these filters."
-                        minWidth={1100}
+                        minWidth={980}
                     >
                         {schedules.data.map((schedule) => (
                             <Row key={schedule.id}>
@@ -280,23 +328,33 @@ export default function Index({ schedules, filters, employees, clients, weekdays
                                     <p className="font-medium text-console-heading">{schedule.employee.name}</p>
                                     <p className="font-mono text-xs text-console-dim">{schedule.employee.code}</p>
                                 </Cell>
-                                <Cell>{schedule.client.name}</Cell>
-                                <Cell className="font-mono text-xs uppercase">{schedule.workingDays.join(' ')}</Cell>
-                                <Cell className="font-mono text-xs">{clock(schedule.startTime)}</Cell>
-                                <Cell className="font-mono text-xs">
-                                    {clock(schedule.endTime)}
-                                    {schedule.crossesMidnight && <span className="text-console-dim"> +1</span>}
-                                </Cell>
-                                <Cell className="font-mono">{schedule.breakAllowance} min</Cell>
+                                <Cell className="text-console-text">{schedule.client.name}</Cell>
                                 <Cell>
-                                    <StatusBadge status={schedule.status} />
+                                    <WeekStrip days={schedule.workingDays} weekdays={weekdays} />
+                                    <p className="mt-1 font-mono text-[11px] text-console-dim">{schedule.workingDays.length} days a week</p>
+                                </Cell>
+                                <Cell>
+                                    <p className="whitespace-nowrap font-mono text-xs text-console-text">
+                                        {clock(schedule.startTime)} – {clock(schedule.endTime)}
+                                        {schedule.crossesMidnight && <span className="text-console-dim"> (+1 day)</span>}
+                                    </p>
                                     <p className="mt-1 font-mono text-[11px] text-console-dim">
-                                        {fullDate(schedule.startDate)}
-                                        {schedule.endDate ? ` – ${fullDate(schedule.endDate)}` : ' →'}
+                                        {schedule.expectedHours}h · {schedule.breakAllowance} min break
                                     </p>
                                 </Cell>
+                                <Cell>
+                                    <p className="whitespace-nowrap font-mono text-xs text-console-text">{fullDate(schedule.startDate)}</p>
+                                    <p className="mt-1 whitespace-nowrap font-mono text-[11px] text-console-dim">
+                                        {schedule.endDate ? `until ${fullDate(schedule.endDate)}` : 'no end date'}
+                                    </p>
+                                </Cell>
+                                <Cell>
+                                    <StatusBadge status={schedule.status} />
+                                </Cell>
                                 <td className="py-3 align-top">
-                                    {schedule.status !== 'ended' && (
+                                    {schedule.status === 'ended' ? (
+                                        <p className="text-right text-xs text-console-dim">History</p>
+                                    ) : (
                                         <div className="flex justify-end gap-1">
                                             <button type="button" className={rowButton} onClick={() => setForm(schedule)}>
                                                 Edit
@@ -315,7 +373,6 @@ export default function Index({ schedules, filters, employees, clients, weekdays
                         <Pagination meta={schedules.meta} />
                     </div>
                 </Panel>
-
             </div>
 
             <Dialog

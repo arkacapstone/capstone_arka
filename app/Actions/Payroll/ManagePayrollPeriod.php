@@ -13,6 +13,7 @@ use App\Notifications\PayrollVerificationOpened;
 use App\Notifications\PayslipReleased;
 use App\Services\ActivityLogger;
 use App\Services\Payroll\PayrollCalculator;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +21,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Moves a payroll period through its lifecycle (Blueprint §14):
  * Period open → Verification → Attendance lock → Review & approve → Released.
+ * Verification moves on ("Process payroll") only after the Admin submits the verified period.
  *
  * Every step that affects contractors notifies them automatically. Verification can be opened
  * any time during the period, but only once; Locked can be toggled back until the payroll is approved.
@@ -63,6 +65,11 @@ class ManagePayrollPeriod
         $next = $period->status->next()
             ?? throw ValidationException::withMessages(['status' => 'This payroll period is already released.']);
 
+        // The Admin reviews the contractors' changes; payroll can be processed only once they submit the verified period.
+        if ($period->status === PayrollPeriodStatus::Verification && ! $period->isSubmittedByAdmin()) {
+            throw ValidationException::withMessages(['status' => 'Payroll can be processed once the Admin submits the verified period.']);
+        }
+
         DB::transaction(function () use ($superAdmin, $period, $next) {
             match ($next) {
                 PayrollPeriodStatus::Locked => $this->calculator->calculate($period),
@@ -97,8 +104,8 @@ class ManagePayrollPeriod
 
             $period->update([
                 'status' => $previous,
-                // Unlocking reopens verification, with a new day to fix attendance.
-                ...($previous === PayrollPeriodStatus::Verification ? ['verification_opened_at' => now()] : []),
+                // Unlocking reopens verification, with a new day to fix attendance, and the Admin submits it again.
+                ...($previous === PayrollPeriodStatus::Verification ? ['verification_opened_at' => now(), 'admin_submitted_at' => null, 'admin_submitted_by' => null] : []),
             ]);
         });
 
@@ -135,6 +142,65 @@ class ManagePayrollPeriod
         return $row;
     }
 
+    /**
+     * Holds a contractor's payroll for the period (e.g. lost company equipment): every row of theirs
+     * stays out of the release until the hold is lifted.
+     */
+    public function hold(Payroll $row, string $reason): void
+    {
+        $row->loadMissing('period', 'employee');
+
+        if (! in_array($row->period->status, [PayrollPeriodStatus::Locked, PayrollPeriodStatus::Processed, PayrollPeriodStatus::Released], true)
+            || $row->status === PayrollStatus::Released) {
+            throw ValidationException::withMessages(['hold_reason' => 'Only payroll that has been processed and not yet released can be held.']);
+        }
+
+        $this->contractorRows($row)->whereNull('held_at')->update(['held_at' => now(), 'hold_reason' => $reason]);
+
+        $this->activity->log('payroll', 'Held payroll', $row, "{$row->employee->name} · {$row->period->period_name} · {$reason}");
+    }
+
+    /**
+     * Lifts the hold. If the period was already released, the contractor's payslip is released now.
+     */
+    public function releaseHold(Payroll $row): void
+    {
+        $row->loadMissing('period', 'employee');
+
+        if ($row->held_at === null) {
+            throw ValidationException::withMessages(['hold_reason' => 'This payroll is not on hold.']);
+        }
+
+        $period = $row->period;
+        $alreadyReleased = $period->status === PayrollPeriodStatus::Released;
+
+        DB::transaction(function () use ($row, $period, $alreadyReleased) {
+            $this->contractorRows($row)->update([
+                'held_at' => null,
+                'hold_reason' => null,
+                ...($alreadyReleased ? ['status' => PayrollStatus::Released] : []),
+            ]);
+
+            if ($alreadyReleased) {
+                $this->cashAdvances->applyPayroll($period, $row->employee_id);
+            }
+        });
+
+        $this->activity->log('payroll', 'Released payroll hold', $row, "{$row->employee->name} · {$period->period_name}");
+
+        if ($alreadyReleased) {
+            $row->employee->notify(new PayslipReleased($period));
+        }
+    }
+
+    /**
+     * @return HasMany<Payroll, PayrollPeriod>
+     */
+    private function contractorRows(Payroll $row): HasMany
+    {
+        return $row->period->payrolls()->where('employee_id', $row->employee_id);
+    }
+
     public function delete(PayrollPeriod $period): void
     {
         if ($period->status !== PayrollPeriodStatus::Open) {
@@ -151,7 +217,8 @@ class ManagePayrollPeriod
      */
     private function release(PayrollPeriod $period): void
     {
-        $period->payrolls()->update(['status' => PayrollStatus::Released]);
+        // Held payroll stays approved until the Super Admin lifts the hold.
+        $period->payrolls()->whereNull('held_at')->update(['status' => PayrollStatus::Released]);
         $this->cashAdvances->applyPayroll($period);
     }
 
@@ -174,7 +241,7 @@ class ManagePayrollPeriod
             PayrollPeriodStatus::Verification => Notification::send(PayrollCalculator::employeesFor($period), new PayrollVerificationOpened($period)),
             PayrollPeriodStatus::Locked => Notification::send(PayrollCalculator::employeesFor($period), new AttendanceLockedForPayroll($period)),
             PayrollPeriodStatus::Released => Notification::send(
-                User::query()->whereIn('id', $period->payrolls()->select('employee_id'))->get(),
+                User::query()->whereIn('id', $period->payrolls()->where('status', PayrollStatus::Released)->select('employee_id'))->get(),
                 new PayslipReleased($period),
             ),
             default => null,

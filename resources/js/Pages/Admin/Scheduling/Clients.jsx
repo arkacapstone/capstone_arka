@@ -85,6 +85,7 @@ function AssignForm({ contractors, clientNames, employmentTypes, hours, taken, o
                 id="start_date"
                 type="date"
                 label="Starts on"
+                min={todayIso()}
                 value={data.start_date}
                 onChange={(e) => setData('start_date', e.target.value)}
                 error={errors.start_date}

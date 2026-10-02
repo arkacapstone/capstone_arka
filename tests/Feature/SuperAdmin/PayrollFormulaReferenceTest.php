@@ -56,9 +56,10 @@ class PayrollFormulaReferenceTest extends TestCase
 
     private function lock(): Payroll
     {
-        foreach (['verification', 'locked'] as $step) {
-            $this->actingAs($this->superAdmin)->post(route('super-admin.payroll.advance', $this->period))->assertSessionHasNoErrors();
-        }
+        $this->actingAs($this->superAdmin)->post(route('super-admin.payroll.advance', $this->period))->assertSessionHasNoErrors();
+        // The Admin submits the verified period; then the Super Admin processes payroll.
+        $this->period->refresh()->update(['admin_submitted_at' => now()]);
+        $this->actingAs($this->superAdmin)->post(route('super-admin.payroll.advance', $this->period))->assertSessionHasNoErrors();
 
         return Payroll::query()->sole();
     }
@@ -152,6 +153,7 @@ class PayrollFormulaReferenceTest extends TestCase
 
         // Recalculating pays it once, not twice.
         $this->actingAs($this->superAdmin)->post(route('super-admin.payroll.revert', $this->period));
+        $this->period->refresh()->update(['admin_submitted_at' => now()]); // the Admin submits again
         $this->actingAs($this->superAdmin)->post(route('super-admin.payroll.advance', $this->period));
         $this->assertSame('227.27', Payroll::query()->sole()->overtime_amount);
     }

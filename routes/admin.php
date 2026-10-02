@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ClientAssignmentController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DevotionalController;
 use App\Http\Controllers\Admin\EmployeeController;
+use App\Http\Controllers\Admin\PeriodVerificationController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,13 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::Admin->value, 'view:adm
     ->name('admin.')
     ->group(function () {
         Route::get('dashboard', DashboardController::class)->name('dashboard');
+
+        // Period Verification: the Admin reviews the contractors' changes, reminds, and submits the period to the Super Admin.
+        Route::get('verification', [PeriodVerificationController::class, 'index'])->name('verification.index');
+        Route::prefix('verification/{period}')->name('verification.')->controller(PeriodVerificationController::class)->group(function () {
+            Route::post('remind', 'remind')->middleware('throttle:6,1')->name('remind');
+            Route::post('submit', 'submit')->name('submit');
+        });
 
         Route::prefix('employees')->name('employees.')->controller(EmployeeController::class)->group(function () {
             Route::get('/', 'index')->name('index');
@@ -45,9 +53,6 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::Admin->value, 'view:adm
         Route::prefix('attendance')->name('attendance.')->controller(AttendanceController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('corrections', 'correct')->name('correct');
-            Route::post('requests/{correction}/approve', 'approve')->name('requests.approve');
-            Route::post('requests/{correction}/reject', 'reject')->name('requests.reject');
-            Route::get('requests/{correction}/proof', 'proof')->name('requests.proof');
         });
 
         Route::prefix('devotionals')->name('devotionals.')->controller(DevotionalController::class)->group(function () {

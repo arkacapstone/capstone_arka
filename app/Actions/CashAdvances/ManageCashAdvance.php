@@ -3,6 +3,7 @@
 namespace App\Actions\CashAdvances;
 
 use App\Enums\CashAdvanceStatus;
+use App\Enums\PayrollStatus;
 use App\Models\CashAdvance;
 use App\Models\CashAdvanceRepayment;
 use App\Models\Payroll;
@@ -93,11 +94,14 @@ class ManageCashAdvance
 
     /**
      * When payslips are released, each cash advance deduction on the payroll becomes a
-     * repayment against the contractor's oldest outstanding advances.
+     * repayment against the contractor's oldest outstanding advances. Held payroll is not paid
+     * yet, so it is applied once its hold is lifted (for that one contractor).
      */
-    public function applyPayroll(PayrollPeriod $period): void
+    public function applyPayroll(PayrollPeriod $period, ?int $employeeId = null): void
     {
         $period->payrolls()
+            ->where('status', PayrollStatus::Released)
+            ->when($employeeId, fn ($query) => $query->where('employee_id', $employeeId))
             ->where('cash_advance_deduction', '>', 0)
             ->get()
             ->each(function (Payroll $row) use ($period) {

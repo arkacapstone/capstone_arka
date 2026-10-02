@@ -11,6 +11,7 @@ enum AdminModule: string
     case Employees = 'employees';
     case Scheduling = 'scheduling';
     case Attendance = 'attendance';
+    case Verification = 'verification';
     case Devotionals = 'devotionals';
     case Reports = 'reports';
 
@@ -21,6 +22,7 @@ enum AdminModule: string
             self::Employees => 'Contractor Management',
             self::Scheduling => 'Scheduling',
             self::Attendance => 'Attendance Management',
+            self::Verification => 'Period Verification',
             self::Devotionals => 'Devotional Management',
             self::Reports => 'Reports',
         };

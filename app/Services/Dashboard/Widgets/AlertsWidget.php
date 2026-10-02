@@ -52,10 +52,6 @@ class AlertsWidget implements DashboardWidget
             $alerts[] = $this->alert('danger', 'Missing clock-outs', "{$this->attendance['missingClockOut']} timer(s) were never stopped. Those days default to Absent until resolved.", null);
         }
 
-        if ($this->attendance['correctionsPending'] > 0) {
-            $alerts[] = $this->alert('info', 'Attendance corrections pending', "{$this->attendance['correctionsPending']} correction request(s) are waiting for Admin review.", null);
-        }
-
         if ($this->pendingApprovals['total'] > 0) {
             $alerts[] = $this->alert('warning', 'Approvals waiting', "{$this->pendingApprovals['total']} item(s) need your decision.", route('super-admin.requests'));
         }

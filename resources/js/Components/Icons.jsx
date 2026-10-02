@@ -123,6 +123,7 @@ export const moduleIcons = {
     employees: UsersIcon,
     scheduling: CalendarClockIcon,
     attendance: CalendarCheckIcon,
+    verification: ClipboardCheckIcon,
     devotionals: BookIcon,
     // Contractor (Contractor flow, "Sidebar Navigation")
     'time-tracker': ClockIcon,

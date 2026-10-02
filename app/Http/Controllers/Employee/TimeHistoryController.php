@@ -63,9 +63,8 @@ class TimeHistoryController extends Controller
             ->groupBy(fn (TimeLog $log) => $log->date->toDateString());
 
         $fixes = $fixHistory->byDate($user, $dates);
-        $pendingDates = $user->correctionRequests()->pending()->pluck('date')->map(fn ($date) => $date->toDateString())->all();
 
-        $days->through(function (string $date) use ($sessions, $fixes, $pendingDates, $board, $user, $now) {
+        $days->through(function (string $date) use ($sessions, $fixes, $board, $user, $now) {
             $daySessions = $sessions->get($date, collect())->map(fn (TimeLog $log) => $board->session($log, $user, $now))->values();
 
             return [
@@ -73,7 +72,6 @@ class TimeHistoryController extends Controller
                 'sessions' => $daySessions->all(),
                 'workedSeconds' => $daySessions->sum('workedSeconds'),
                 'fixes' => $fixes[$date] ?? [],
-                'correctionPending' => in_array($date, $pendingDates, true),
             ];
         });
 

@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\UserRole;
 use App\Enums\Weekday;
 use App\Models\Client;
+use App\Models\Schedule;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,14 +34,27 @@ class ScheduleRequest extends FormRequest
                 ? ['prohibited']
                 : ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'client_id' => ['required', 'integer', Rule::exists(Client::class, 'id')->where('is_active', true)],
-            'working_days' => ['required', 'array', 'min:1'],
+            'working_days' => ['required', 'array', 'min:1', 'max:'.Schedule::MAX_WORKING_DAYS],
             'working_days.*' => ['distinct', Rule::enum(Weekday::class)],
             'start_time' => ['required', 'date_format:H:i'],
             'end_time' => ['required', 'date_format:H:i', 'different:start_time'],
             'break_allowance_minutes' => ['required', 'integer', 'min:0', 'max:240'],
-            'start_date' => $changing ? ['prohibited'] : ['required', 'date'],
+            // Schedules start today at the earliest; past dates cannot be picked.
+            'start_date' => $changing ? ['prohibited'] : ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['nullable', 'date', $changing ? 'after_or_equal:effective_date' : 'after_or_equal:start_date'],
-            'effective_date' => $changing ? ['required', 'date'] : ['prohibited'],
+            'effective_date' => $changing ? ['required', 'date', 'after_or_equal:today'] : ['prohibited'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'working_days.max' => 'A contractor can be scheduled for at most '.Schedule::MAX_WORKING_DAYS.' working days a week.',
+            'start_date.after_or_equal' => 'The start date cannot be in the past.',
+            'effective_date.after_or_equal' => 'The effective date cannot be in the past.',
         ];
     }
 

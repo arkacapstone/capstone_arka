@@ -9,7 +9,7 @@ import { fullDate, hms, parseDate } from '@/lib/format';
  * One day of tracked time (▸ Sep 19, 2026): opens to its sessions and, if anything was fixed
  * that day, the time it replaced and the new time.
  */
-export default function DaySessions({ date, sessions, fixes = [], correctionPending = false, defaultOpen = false }) {
+export default function DaySessions({ date, sessions, fixes = [], defaultOpen = false }) {
     const weekday = parseDate(date).toLocaleDateString('en-US', { weekday: 'short' });
     const worked = sessions.reduce((total, session) => total + session.workedSeconds, 0);
 
@@ -26,7 +26,6 @@ export default function DaySessions({ date, sessions, fixes = [], correctionPend
                             {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'} · {hms(worked)}
                         </span>
                         {fixes.length > 0 && <Tag tone="live">Fixed</Tag>}
-                        {correctionPending && <StatusBadge status="correction_pending" label="Correction pending" />}
                     </div>
                 </div>
             }

@@ -29,6 +29,11 @@ class Schedule extends Model
      */
     public const DEFAULT_BREAK_ALLOWANCE = 60;
 
+    /**
+     * Most working days a contractor can be scheduled for in a week, across all their clients.
+     */
+    public const MAX_WORKING_DAYS = 5;
+
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';

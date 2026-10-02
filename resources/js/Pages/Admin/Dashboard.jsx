@@ -1,8 +1,9 @@
 import Panel, { Eyebrow, MetricRow, PanelHeading } from '@/Components/Console/Panel';
 import RecentNotifications from '@/Components/Console/RecentNotifications';
+import { Tag } from '@/Components/Console/StatusBadge';
 import { ArrowRightIcon } from '@/Components/Icons';
 import AppLayout from '@/Layouts/AppLayout';
-import { fullDate, greeting, shortDate } from '@/lib/format';
+import { dateTime, fullDate, greeting, shortDate } from '@/lib/format';
 import { Link, usePage, usePoll } from '@inertiajs/react';
 
 function CardLink({ href, children }) {
@@ -26,6 +27,42 @@ function StatTiles({ tiles, compact = false }) {
                 </div>
             ))}
         </dl>
+    );
+}
+
+/** Summary of the Period Verification module; the review itself happens there. */
+function PeriodVerification({ verification }) {
+    const { period, counts } = verification;
+
+    return (
+        <Panel className="lg:col-span-3">
+            <PanelHeading
+                title="Period verification"
+                subtitle={period ? `${period.name} · ${period.statusLabel}` : 'No payroll period is being verified'}
+                action={<CardLink href={route('admin.verification.index')}>Open Period Verification</CardLink>}
+            />
+            {period && (
+                <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm">
+                    <p>
+                        <span className="font-mono text-3xl font-medium text-console-heading">
+                            {counts.verified}/{counts.total}
+                        </span>{' '}
+                        <span className="text-console-muted">submitted</span>
+                    </p>
+                    <p>
+                        <span className="font-mono text-3xl font-medium text-console-heading">{counts.fixes}</span>{' '}
+                        <span className="text-console-muted">{counts.fixes === 1 ? 'change to review' : 'changes to review'}</span>
+                    </p>
+                    {period.adminSubmittedAt ? (
+                        <Tag tone="live">Submitted to Super Admin · {dateTime(period.adminSubmittedAt)}</Tag>
+                    ) : period.canSubmit ? (
+                        <Tag tone="live">Ready to submit</Tag>
+                    ) : period.status === 'verification' ? (
+                        <Tag tone="waiting">{counts.waiting} not submitted yet</Tag>
+                    ) : null}
+                </div>
+            )}
+        </Panel>
     );
 }
 
@@ -144,10 +181,10 @@ function PendingDevotionals({ devotionals }) {
     );
 }
 
-export default function Dashboard({ employees, attendance, incomplete, onShift, devotionals, summary }) {
+export default function Dashboard({ employees, attendance, incomplete, onShift, devotionals, verification, summary }) {
     const { auth } = usePage().props;
 
-    usePoll(60_000, { only: ['employees', 'attendance', 'incomplete', 'onShift', 'devotionals', 'summary', 'notifications'] });
+    usePoll(60_000, { only: ['employees', 'attendance', 'incomplete', 'onShift', 'devotionals', 'verification', 'summary', 'notifications'] });
 
     return (
         <AppLayout title="Home">
@@ -160,6 +197,7 @@ export default function Dashboard({ employees, attendance, incomplete, onShift, 
                 </div>
 
                 <div className="grid gap-9 lg:grid-cols-3 lg:gap-7">
+                    <PeriodVerification verification={verification} />
                     <EmployeeOverview employees={employees} />
                     <TodayAttendance attendance={attendance} />
                     <IncompleteAlerts incomplete={incomplete} />

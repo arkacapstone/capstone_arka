@@ -1,5 +1,5 @@
 import Dialog from '@/Components/Console/Dialog';
-import Field, { ConsoleButton, SecondaryButton, TextAreaField } from '@/Components/Console/Field';
+import Field, { ConsoleButton, TextAreaField } from '@/Components/Console/Field';
 import Pagination from '@/Components/Console/Pagination';
 import Panel, { Eyebrow, MetricRow, PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
@@ -102,74 +102,7 @@ function Details({ record, onFix }) {
     );
 }
 
-function RequestRow({ request }) {
-    const [mode, setMode] = useState(null); // 'approve' | 'reject'
-    const { data, setData, post, processing, errors, reset } = useForm({ remarks: '' });
-
-    const submit = (e) => {
-        e.preventDefault();
-        post(route(mode === 'approve' ? 'admin.attendance.requests.approve' : 'admin.attendance.requests.reject', request.id), {
-            preserveScroll: true,
-            onSuccess: () => {
-                reset();
-                setMode(null);
-            },
-        });
-    };
-
-    return (
-        <Row>
-            <Cell className="font-mono text-xs">{fullDate(request.date)}</Cell>
-            <Cell className="font-medium text-console-heading">{request.employee}</Cell>
-            <Cell>{request.field}</Cell>
-            <Cell className="font-mono text-xs">
-                <span className="text-console-dim">{request.original}</span> → {request.requested}
-            </Cell>
-            <Cell className="max-w-xs text-sm">
-                {request.reason}
-                {request.proofUrl && (
-                    <a href={request.proofUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-arka-teal hover:underline">
-                        View proof
-                    </a>
-                )}
-            </Cell>
-            <td className="py-3 align-top">
-                {mode === null ? (
-                    <div className="flex justify-end gap-2">
-                        <ConsoleButton type="button" onClick={() => setMode('approve')} className="!px-3 !py-1.5 !text-xs">
-                            Approve
-                        </ConsoleButton>
-                        <SecondaryButton onClick={() => setMode('reject')} className="!px-3 !py-1.5 !text-xs">
-                            Close
-                        </SecondaryButton>
-                    </div>
-                ) : (
-                    <form onSubmit={submit} className="ml-auto flex w-64 flex-col gap-2">
-                        <textarea
-                            value={data.remarks}
-                            onChange={(e) => setData('remarks', e.target.value)}
-                            rows={2}
-                            placeholder={mode === 'approve' ? 'Remarks (optional)' : 'What should the contractor know? (required)'}
-                            className={`${control} w-full text-xs`}
-                        />
-                        {errors.remarks && <p className="text-xs text-console-error">{errors.remarks}</p>}
-                        {errors.status && <p className="text-xs text-console-error">{errors.status}</p>}
-                        <div className="flex gap-2">
-                            <ConsoleButton disabled={processing} className="!px-3 !py-1.5 !text-xs">
-                                {mode === 'approve' ? 'Apply correction' : 'Close request'}
-                            </ConsoleButton>
-                            <button type="button" onClick={() => setMode(null)} className="text-xs text-console-muted hover:text-arka-teal">
-                                Back
-                            </button>
-                        </div>
-                    </form>
-                )}
-            </td>
-        </Row>
-    );
-}
-
-export default function Index({ filters, summary, records, requests, log, fix, employees, statuses }) {
+export default function Index({ filters, summary, records, log, fix, employees, statuses }) {
     const { apply } = useFilters('admin.attendance.index', filters);
     const [details, setDetails] = useState(null);
     const [fixing, setFixing] = useState(fix);
@@ -177,7 +110,6 @@ export default function Index({ filters, summary, records, requests, log, fix, e
 
     const tabs = [
         ['records', 'Attendance'],
-        ['requests', `Incoming requests${requests.length ? ` (${requests.length})` : ''}`],
         ['log', 'Correction log'],
     ];
 
@@ -294,27 +226,6 @@ export default function Index({ filters, summary, records, requests, log, fix, e
                         </div>
                         <div className="mt-5">
                             <Pagination meta={records.meta} />
-                        </div>
-                    </Panel>
-                )}
-
-                {tab === 'requests' && (
-                    <Panel>
-                        <PanelHeading
-                            title="Incoming correction requests"
-                            subtitle="Submitted by contractors with proof. Approving applies the correction to the official attendance before the cutoff."
-                        />
-                        <div className="mt-6">
-                            <Table
-                                columns={['Date', 'Contractor', 'Field', 'Requested change', 'Reason', 'Decision']}
-                                isEmpty={requests.length === 0}
-                                emptyMessage="No requests are waiting. New ones appear here as contractors submit them."
-                                minWidth={960}
-                            >
-                                {requests.map((request) => (
-                                    <RequestRow key={request.id} request={request} />
-                                ))}
-                            </Table>
                         </div>
                     </Panel>
                 )}

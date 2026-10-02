@@ -121,7 +121,7 @@ export default function Payslips({ payslips, employee }) {
                                     <Cell className="font-mono">{payslip.status === 'available' ? fullDate(payslip.issued) : '—'}</Cell>
                                     <Cell className="font-mono">{payslip.net !== null ? peso(payslip.net) : '—'}</Cell>
                                     <Cell>
-                                        <StatusBadge status={payslip.status} label={payslip.status === 'available' ? 'Available' : 'Processing'} />
+                                        <StatusBadge status={payslip.status} label={payslip.status === 'available' ? 'Available' : payslip.status === 'on_hold' ? 'On hold' : 'Processing'} />
                                     </Cell>
                                     <td className="py-3 text-right align-top">
                                         {payslip.status === 'available' ? (

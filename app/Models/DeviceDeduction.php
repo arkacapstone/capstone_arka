@@ -31,6 +31,14 @@ class DeviceDeduction extends Model
     }
 
     /**
+     * @return BelongsTo<Payroll, $this>
+     */
+    public function payroll(): BelongsTo
+    {
+        return $this->belongsTo(Payroll::class);
+    }
+
+    /**
      * Device loss/damage deductions still awaiting the Super Admin decision.
      */
     #[Scope]

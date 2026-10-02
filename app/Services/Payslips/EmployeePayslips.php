@@ -33,8 +33,21 @@ class EmployeePayslips
 
     public function isReleased(PayrollPeriod $period, Collection $rows): bool
     {
+        // A held payroll stays unreleased until the Super Admin lifts the hold.
+        if ($this->isHeld($rows)) {
+            return false;
+        }
+
         return $period->status === PayrollPeriodStatus::Released
             || $rows->every(fn (Payroll $row) => $row->status === PayrollStatus::Released);
+    }
+
+    /**
+     * @param  Collection<int, Payroll>  $rows
+     */
+    public function isHeld(Collection $rows): bool
+    {
+        return $rows->contains(fn (Payroll $row) => $row->held_at !== null);
     }
 
     /**
@@ -96,7 +109,7 @@ class EmployeePayslips
             'periodStart' => $period->start_date->toDateString(),
             'periodEnd' => $period->end_date->toDateString(),
             'issued' => $period->release_date?->toDateString(),
-            'status' => $available ? 'available' : 'processing',
+            'status' => $available ? 'available' : ($this->isHeld($rows) ? 'on_hold' : 'processing'),
             'net' => $shown ? $sum('net_pay') : null,
             'earnings' => $shown ? $earnings : [],
             'grossTotal' => $shown ? round(array_sum(array_column($earnings, 'amount')), 2) : null,

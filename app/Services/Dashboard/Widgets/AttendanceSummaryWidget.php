@@ -4,7 +4,6 @@ namespace App\Services\Dashboard\Widgets;
 
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
-use App\Models\AttendanceCorrection;
 use App\Models\TimeLog;
 use App\Models\User;
 use App\Services\Dashboard\Contracts\DashboardWidget;
@@ -53,7 +52,6 @@ class AttendanceSummaryWidget implements DashboardWidget
             ], AttendanceStatus::cases()),
             'clockedIn' => TimeLog::query()->open()->where('time_in', '>=', $openTimerCutoff)->distinct()->count('employee_id'),
             'missingClockOut' => TimeLog::query()->open()->where('time_in', '<', $openTimerCutoff)->count(),
-            'correctionsPending' => AttendanceCorrection::query()->pending()->count(),
         ];
     }
 }

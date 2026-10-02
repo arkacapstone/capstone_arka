@@ -3,11 +3,10 @@
 namespace App\Notifications;
 
 use App\Models\AttendanceVerification;
-use App\Models\User;
 
 /**
- * A contractor submitted their attendance as verified for payroll (Blueprint §14). The Super Admin
- * and Admins see who confirmed, and how many days they fixed first.
+ * A contractor submitted their attendance as verified for payroll (Blueprint §14). Admins see who
+ * confirmed and how many days they fixed first; they review the changes in Period Verification.
  */
 class AttendanceVerified extends ArkaNotification
 {
@@ -29,9 +28,7 @@ class AttendanceVerified extends ArkaNotification
 
     protected function url(object $notifiable): ?string
     {
-        return $notifiable instanceof User && $notifiable->isSuperAdmin()
-            ? route('super-admin.payroll', ['tab' => 'verification'], absolute: false)
-            : route('admin.attendance.index', absolute: false);
+        return route('admin.verification.index', absolute: false);
     }
 
     protected function category(): string

@@ -121,7 +121,7 @@ class AttendanceVerificationTest extends TestCase
         $this->post(route('employee.attendance.verification.submit', $this->period))->assertSessionHasNoErrors();
     }
 
-    public function test_submitting_notifies_the_super_admin_and_admins(): void
+    public function test_submitting_notifies_the_admins_but_not_the_super_admin(): void
     {
         Notification::fake();
         $superAdmin = User::factory()->superAdmin()->create();
@@ -135,18 +135,19 @@ class AttendanceVerificationTest extends TestCase
         ]);
         $this->post(route('employee.attendance.verification.submit', $this->period))->assertSessionHasNoErrors();
 
-        Notification::assertSentTo($superAdmin, AttendanceVerified::class, function (AttendanceVerified $notification) use ($superAdmin) {
-            $data = $notification->toArray($superAdmin);
+        // The Admin reviews the changes; the Super Admin only hears once the Admin submits the period.
+        Notification::assertSentTo($admin, AttendanceVerified::class, function (AttendanceVerified $notification) use ($admin) {
+            $data = $notification->toArray($admin);
 
             return str_contains($data['message'], $this->contractor->name)
                 && str_contains($data['message'], '1 fix made')
-                && $data['url'] === route('super-admin.payroll', ['tab' => 'verification'], absolute: false);
+                && $data['url'] === route('admin.verification.index', absolute: false);
         });
-        Notification::assertSentTo($admin, AttendanceVerified::class);
+        Notification::assertNotSentTo($superAdmin, AttendanceVerified::class);
         Notification::assertNotSentTo($this->contractor, AttendanceVerified::class);
     }
 
-    public function test_the_super_admin_sees_who_verified_and_every_fix(): void
+    public function test_the_super_admin_only_sees_who_submitted_without_the_changes(): void
     {
         $day = $this->attendance('2026-09-15');
         $other = User::factory()->create(['name' => 'Zed Pending']);
@@ -168,11 +169,11 @@ class AttendanceVerificationTest extends TestCase
                 ->where('verification.period.fixWindowOpen', true)
                 ->where('verification.counts.verified', 1)
                 ->where('verification.counts.total', 2)
+                ->missing('verification.counts.fixes')
+                // View-only: only those who submitted, and not what they changed.
+                ->has('verification.contractors', 1)
                 ->where('verification.contractors.0.id', $this->contractor->id)
-                ->where('verification.contractors.0.fixes.0.before', '9:00 AM – —')
-                ->where('verification.contractors.0.fixes.0.after', '9:00 AM – 6:00 PM')
-                ->where('verification.contractors.1.name', 'Zed Pending')
-                ->where('verification.contractors.1.verifiedAt', null));
+                ->missing('verification.contractors.0.fixes'));
     }
 
     public function test_time_history_groups_sessions_by_day_with_the_fixes(): void

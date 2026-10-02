@@ -70,15 +70,21 @@ class PayrollOverviewWidget implements DashboardWidget
      * The next step and its toggle back. A projected period isn't saved yet, so its only
      * action is to create it and open attendance verification.
      *
-     * @return array{label: ?string, description: ?string, revertLabel: ?string, revertDescription: ?string}
+     * "Process payroll" stays unavailable until the Admin submits the verified period.
+     *
+     * @return array{label: ?string, description: ?string, blocked: ?string, revertLabel: ?string, revertDescription: ?string}
      */
     private function action(): array
     {
         $status = $this->period->exists ? $this->period->status : PayrollPeriodStatus::Open;
+        $waitingForAdmin = $status === PayrollPeriodStatus::Verification && ! $this->period->isSubmittedByAdmin();
 
         return [
             'label' => $status->actionLabel(),
-            'description' => $status->actionDescription(),
+            'description' => $waitingForAdmin
+                ? 'Waiting for the Admin to review the contractors\' changes and submit the verified period. Process payroll becomes available once they do.'
+                : $status->actionDescription(),
+            'blocked' => $waitingForAdmin ? 'Waiting for the Admin to submit the verified period' : null,
             'revertLabel' => $status->revertLabel(),
             'revertDescription' => $status->revertDescription(),
         ];

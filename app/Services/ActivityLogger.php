@@ -22,7 +22,6 @@ class ActivityLogger
             'reference_table' => $subject?->getTable(),
             'reference_id' => $subject?->getKey(),
             'details' => $details,
-            'ip_address' => $this->request->ip(),
         ]);
     }
 }

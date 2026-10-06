@@ -20,8 +20,6 @@ function fullDate(value) {
 }
 
 function AssignmentCard({ rate, onChange, onEnd }) {
-    const hourly = rate.payFrequency === 'hourly';
-
     return (
         <div className="border border-console-line p-5 transition-colors hover:border-arka-teal">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -36,13 +34,11 @@ function AssignmentCard({ rate, onChange, onEnd }) {
 
             <p className="mt-4 font-mono text-2xl text-console-heading">
                 {peso(rate.grossPay)}
-                <span className="text-sm text-console-muted">{hourly ? ' / hour' : ' / period'}</span>
+                <span className="text-sm text-console-muted"> / period</span>
             </p>
 
-            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-4">
+            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                 {[
-                    ['Working days', rate.workingDays],
-                    ['Hours / day', rate.hoursPerDay],
                     ['Hourly', peso(rate.hourlyRate)],
                     ['Daily', peso(rate.dailyRate)],
                 ].map(([label, value]) => (
@@ -73,7 +69,7 @@ function AssignmentCard({ rate, onChange, onEnd }) {
     );
 }
 
-export default function EmployeeShow({ employee, section = 'employees', rateHistory, clients, employmentTypes, payFrequencies }) {
+export default function EmployeeShow({ employee, section = 'employees', rateHistory, clients, employmentTypes, payFrequencies, rateDefaults }) {
     const [editing, setEditing] = useState(false);
     const [rateForm, setRateForm] = useState(null); // null = closed, rate = change
     const [ending, setEnding] = useState(null);
@@ -239,6 +235,7 @@ export default function EmployeeShow({ employee, section = 'employees', rateHist
                         employeeId={employee.id}
                         rate={rateForm}
                         payFrequencies={payFrequencies}
+                        defaults={rateDefaults}
                         onDone={() => setRateForm(null)}
                     />
                 )}

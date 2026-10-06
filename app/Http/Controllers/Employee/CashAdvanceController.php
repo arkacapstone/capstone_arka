@@ -6,7 +6,6 @@ use App\Actions\CashAdvances\ManageCashAdvance;
 use App\Enums\CashAdvanceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\CashAdvance;
-use App\Services\Settings\SystemRules;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,12 +17,16 @@ use Inertia\Response;
  */
 class CashAdvanceController extends Controller
 {
-    public function index(Request $request, SystemRules $rules): Response
+    public function index(Request $request, ManageCashAdvance $manage): Response
     {
+        $window = $manage->window($request->user());
+
         return Inertia::render('Employee/CashAdvances', [
             'advances' => $request->user()->cashAdvances()->latest()->limit(20)->get()->map(fn (CashAdvance $advance) => [
                 'id' => $advance->id,
                 'amount' => (float) $advance->amount,
+                'requestedAmount' => (float) ($advance->requested_amount ?? $advance->amount),
+                'payday' => $advance->payday?->toDateString(),
                 'remaining' => (float) $advance->remaining_balance,
                 'reason' => $advance->reason,
                 'status' => $advance->status->value,
@@ -32,8 +35,11 @@ class CashAdvanceController extends Controller
                 'releasedDate' => $advance->released_date?->toDateString(),
                 'canCancel' => $advance->status === CashAdvanceStatus::Pending,
             ])->all(),
-            'rules' => [
-                'maxAmount' => $rules->decimal('cash_advance_max_amount'),
+            'requestWindow' => [
+                'open' => $window['open'],
+                'reason' => $window['reason'],
+                'limit' => $window['limit'],
+                'payday' => $window['period']?->release_date->toDateString(),
             ],
         ]);
     }

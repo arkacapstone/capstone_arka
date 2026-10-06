@@ -21,7 +21,15 @@ function ContractorSummary({ contractor, showFixes }) {
                         {contractor.fixes.length} {contractor.fixes.length === 1 ? 'change' : 'changes'}
                     </span>
                 )}
-                {contractor.verifiedAt ? <Tag tone="live">Submitted · {dateTime(contractor.verifiedAt)}</Tag> : <Tag tone="waiting">Not submitted yet</Tag>}
+                {contractor.autoSubmitted ? (
+                    <span title="Did not submit, so it was submitted with their attendance as recorded when the Admin submitted the period.">
+                        <Tag tone="waiting">Auto-submitted · as recorded</Tag>
+                    </span>
+                ) : contractor.verifiedAt ? (
+                    <Tag tone="live">Submitted · {dateTime(contractor.verifiedAt)}</Tag>
+                ) : (
+                    <Tag tone="waiting">Not submitted yet</Tag>
+                )}
             </div>
         </div>
     );
@@ -87,6 +95,7 @@ function AdminActions({ period, counts }) {
                 </p>
             )}
             {period.submitBlocker && <p className="max-w-md text-right text-xs text-console-muted">{period.submitBlocker}</p>}
+            {period.submitWarning && <p className="max-w-md text-right text-xs text-console-heading">{period.submitWarning}</p>}
             {errors.period && <p className="max-w-md text-right text-xs text-console-error">{errors.period}</p>}
 
             <ConfirmDialog
@@ -96,7 +105,7 @@ function AdminActions({ period, counts }) {
                     confirming === 'remind'
                         ? `${counts.waiting} ${counts.waiting === 1 ? 'contractor has' : 'contractors have'} not submitted yet. They'll be told it's already the cut-off, to submit now, and how much time they have left to make changes.`
                         : `You reviewed the contractors' changes. The Super Admin will be notified and can process payroll. Contractors can no longer fix or submit after this.${
-                              counts.waiting > 0 ? ` ${counts.waiting} who did not submit will be paid on their recorded attendance.` : ''
+                              counts.waiting > 0 ? ` ${counts.waiting} ${counts.waiting === 1 ? 'contractor has' : 'contractors have'} not submitted yet: they will be submitted automatically with their attendance as recorded, and can no longer fix it.` : ''
                           }`
                 }
                 confirmLabel={processing ? 'Working…' : confirming === 'remind' ? 'Send reminder' : 'Submit to Super Admin'}
@@ -149,6 +158,7 @@ export default function VerificationResults({ verification, mode = 'super-admin'
                         {counts.verified}/{counts.total}
                     </span>{' '}
                     <span className="text-console-muted">submitted</span>
+                    {counts.autoSubmitted > 0 && <span className="text-console-muted"> ({counts.autoSubmitted} auto-submitted)</span>}
                 </p>
                 {isAdmin && (
                     <p>
@@ -174,9 +184,20 @@ export default function VerificationResults({ verification, mode = 'super-admin'
                 <div className="mt-6 flex flex-col gap-2">
                     {contractors.length === 0 && <p className="text-sm italic text-console-muted">No contractors are paid in this period.</p>}
                     {contractors.map((contractor) => (
-                        <Collapsible key={contractor.id} summary={<ContractorSummary contractor={contractor} showFixes />}>
-                            <FixList fixes={contractor.fixes} emptyMessage="No days changed. The recorded attendance was kept as is." />
-                        </Collapsible>
+                        // Only someone who fixed a day has anything to open; the rest kept their attendance as is.
+                        contractor.fixes.length > 0 ? (
+                            <Collapsible key={contractor.id} summary={<ContractorSummary contractor={contractor} showFixes />}>
+                                <FixList fixes={contractor.fixes} />
+                            </Collapsible>
+                        ) : (
+                            // Same spacing as a collapsible row, with room where its arrow would be so names line up.
+                            <div key={contractor.id} className="flex items-center gap-3 border border-console-line bg-console-panel px-4 py-3 text-sm">
+                                <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                <div className="min-w-0 flex-1">
+                                    <ContractorSummary contractor={contractor} showFixes />
+                                </div>
+                            </div>
+                        )
                     ))}
                 </div>
             ) : (

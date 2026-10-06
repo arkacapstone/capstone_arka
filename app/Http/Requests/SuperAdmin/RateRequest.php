@@ -32,8 +32,6 @@ class RateRequest extends FormRequest
                 : ['prohibited'],
             'gross_pay' => ['required', 'numeric', 'min:1', 'max:9999999'],
             'pay_frequency' => ['required', Rule::enum(PayFrequency::class)],
-            'working_days' => ['required', 'integer', 'between:1,31'],
-            'hours_per_day' => ['required', 'integer', 'between:1,24'],
             'effective_date' => ['required', 'date'],
         ];
     }
@@ -47,8 +45,6 @@ class RateRequest extends FormRequest
             'client_id' => 'client',
             'gross_pay' => 'gross pay',
             'pay_frequency' => 'pay frequency',
-            'working_days' => 'working days',
-            'hours_per_day' => 'hours per day',
             'effective_date' => 'effective date',
         ];
     }

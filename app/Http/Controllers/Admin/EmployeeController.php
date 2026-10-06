@@ -66,7 +66,7 @@ class EmployeeController extends AccountController
         $monthStart = CarbonImmutable::today()->startOfMonth();
 
         $schedules = $employee->schedules()
-            ->with('client:id,client_name,client_code')
+            ->with('client:id,client_name,client_code,break_allowance_minutes')
             ->orderByRaw('end_date is not null')
             ->orderByDesc('start_date')
             ->orderByDesc('id')

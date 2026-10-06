@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\SuperAdmin\Workforce;
 
-use App\Actions\Accounts\CreateAccount;
 use App\Actions\Accounts\UpdateAccount;
 use App\Enums\EmploymentType;
 use App\Enums\PayFrequency;
@@ -13,6 +12,7 @@ use App\Http\Resources\AccountResource;
 use App\Http\Resources\RateResource;
 use App\Models\Client;
 use App\Models\User;
+use App\Services\Settings\SystemRules;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,7 +44,7 @@ class EmployeeController extends AccountController
             ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->whereHas(
                 'currentRates', fn (Builder $query) => $query->where('client_id', $client)
             ))
-            ->with('currentRates.client')
+            ->with('currentRates.client', 'rates.client')
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
@@ -73,7 +73,7 @@ class EmployeeController extends AccountController
         ]);
     }
 
-    public function show(Request $request, User $account): Response
+    public function show(Request $request, User $account, SystemRules $rules): Response
     {
         // An Admin is also a contractor, so the Super Admin assigns clients and rates to Admins here too.
         abort_unless($account->hasEmployeePortal(), 404);
@@ -92,22 +92,15 @@ class EmployeeController extends AccountController
             'rateHistory' => RateResource::collection($history),
             'clients' => $this->clientOptions(),
             'employmentTypes' => EmploymentType::options(),
-            'payFrequencies' => array_map(fn (PayFrequency $frequency) => [
-                'value' => $frequency->value,
-                'label' => $frequency->label(),
-            ], PayFrequency::cases()),
+            'payFrequencies' => PayFrequency::options(),
+            // For the hourly / daily preview on Change rate; the values themselves are set in System & Rules.
+            'rateDefaults' => [
+                'workingDays' => $rules->integer('default_working_days'),
+                'hoursPerDay' => $rules->integer('default_hours_per_day'),
+                'fullTimeHours' => $rules->integer('full_time_hours'),
+                'partTimeHours' => $rules->integer('part_time_hours'),
+            ],
         ]);
-    }
-
-    public function store(EmployeeRequest $request, CreateAccount $createAccount): RedirectResponse
-    {
-        $invited = $createAccount->handle(UserRole::Employee, $request->validated());
-
-        return $this->withInvitation(
-            to_route('super-admin.workforce.employees.show', $invited->user),
-            $invited,
-            'Contractor invited. An Admin gives them a client and schedule; you approve it in Requests & Approvals.',
-        );
     }
 
     public function update(EmployeeRequest $request, User $account, UpdateAccount $updateAccount): RedirectResponse

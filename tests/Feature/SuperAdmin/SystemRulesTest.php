@@ -29,7 +29,7 @@ class SystemRulesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('SuperAdmin/Rules/Index')
-                ->has('groups', 6)
+                ->has('groups', 5)
                 ->where('groups.0.key', 'payroll')
                 ->where('groups.0.rules.0.key', 'default_working_days')
                 ->where('groups.0.rules.0.value', 11));
@@ -38,11 +38,11 @@ class SystemRulesTest extends TestCase
     public function test_saving_rules_updates_what_payroll_applies_and_is_logged(): void
     {
         $this->actingAs($this->superAdmin)
-            ->put(route('super-admin.rules.update'), ['cash_advance_max_amount' => 1500, 'late_deductions_enabled' => false])
+            ->put(route('super-admin.rules.update'), ['timer_early_start_minutes' => 15, 'late_deductions_enabled' => false])
             ->assertSessionHasNoErrors();
 
         $rules = app(SystemRules::class);
-        $this->assertSame(1500.0, $rules->decimal('cash_advance_max_amount'));
+        $this->assertSame(15, $rules->integer('timer_early_start_minutes'));
         $this->assertFalse($rules->enabled('late_deductions_enabled'));
         $this->assertDatabaseHas('activity_logs', ['module' => 'rules', 'action' => 'Updated system rules']);
     }

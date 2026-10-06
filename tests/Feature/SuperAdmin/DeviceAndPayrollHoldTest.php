@@ -106,13 +106,36 @@ class DeviceAndPayrollHoldTest extends TestCase
     public function test_a_device_needs_a_value_and_must_be_assigned_to_be_lost(): void
     {
         $this->actingAs($this->superAdmin)
-            ->post(route('super-admin.workforce.devices.store'), ['device_name' => 'Monitor', 'value' => 0])
+            ->post(route('super-admin.workforce.devices.store'), ['device_type' => 'Monitor', 'device_name' => 'Dell P2422H', 'value' => 0])
             ->assertSessionHasErrors('value');
+
+        $this->post(route('super-admin.workforce.devices.store'), ['device_type' => 'Spaceship', 'device_name' => 'X', 'value' => 10])
+            ->assertSessionHasErrors('device_type');
 
         $monitor = $this->addDevice('Monitor', 8000);
 
         $this->post(route('super-admin.workforce.devices.lost', $monitor))->assertSessionHasErrors('device');
         $this->assertDatabaseCount(DeviceDeduction::class, 0);
+    }
+
+    public function test_a_device_can_be_assigned_when_it_is_added(): void
+    {
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.workforce.devices.store'), [
+                'device_type' => 'Keyboard',
+                'device_name' => 'Logitech K120',
+                'value' => 650,
+                'employee_id' => $this->contractor->id,
+                'assigned_date' => '2026-09-26',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Device added and assigned.');
+
+        $keyboard = Device::query()->sole();
+
+        $this->assertSame(Device::STATUS_ASSIGNED, $keyboard->status);
+        $this->assertSame('Keyboard', $keyboard->device_type);
+        $this->assertTrue($keyboard->currentAssignment->employee->is($this->contractor));
     }
 
     public function test_a_returned_device_is_available_again(): void

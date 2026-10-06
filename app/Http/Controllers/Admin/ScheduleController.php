@@ -38,20 +38,21 @@ class ScheduleController extends Controller
         $status = $filters['status'] ?? 'current';
 
         $schedules = Schedule::query()
-            ->with(['employee:id,name,employee_code', 'client:id,client_name'])
+            ->with(['employee:id,name,employee_code', 'client:id,client_name,break_allowance_minutes'])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->where(
                 fn (Builder $query) => $query
                     ->whereHas('employee', fn (Builder $query) => $query
                         ->where('name', 'like', "%{$search}%")
                         ->orWhere('employee_code', 'like', "%{$search}%"))
             ))
-            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->where('client_id', $client))
-            ->when($filters['day'] ?? null, fn (Builder $query, string $day) => $query->where('working_days', 'like', "%\"{$day}\"%"))
-            ->when($status === 'ended', fn (Builder $query) => $query->whereDate('end_date', '<', $today))
+            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->where('schedules.client_id', $client))
+            ->when($filters['day'] ?? null, fn (Builder $query, string $day) => $query->where('schedules.working_days', 'like', "%\"{$day}\"%"))
+            ->when($status === 'ended', fn (Builder $query) => $query->whereDate('schedules.end_date', '<', $today))
             ->when($status !== 'ended', fn (Builder $query) => $query->where(
-                fn (Builder $query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $today)
+                fn (Builder $query) => $query->whereNull('schedules.end_date')->orWhereDate('schedules.end_date', '>=', $today)
             ))
-            ->when(in_array($status, ['active', 'inactive'], true), fn (Builder $query) => $query->where('status', $status))
+            ->when(in_array($status, ['active', 'inactive'], true), fn (Builder $query) => $query->where('schedules.status', $status))
+            // Joined only to sort by name; every filter above names the schedules table, since users has a status too.
             ->join('users', 'users.id', '=', 'schedules.employee_id')
             ->orderBy('users.name')
             ->orderBy('schedules.start_time')

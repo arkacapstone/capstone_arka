@@ -115,6 +115,8 @@ class AttendanceController extends Controller
             'canFix' => $period->fixWindowOpen() && ! $period->isSubmittedByAdmin(),
             // Once the Admin submits the verified period to the Super Admin, nothing more can be changed.
             'closed' => $period->isSubmittedByAdmin(),
+            // Never submitted, so it was submitted for them with their attendance as recorded.
+            'autoSubmitted' => (bool) $verification?->auto_submitted || ($period->isSubmittedByAdmin() && $verification?->verified_at === null),
             'fixDeadline' => $period->fixDeadline()?->toIso8601String(),
             'fixes' => $verification?->corrections->map(fn (AttendanceCorrection $correction) => FixHistory::present($correction))->all() ?? [],
             'records' => $user->attendances()

@@ -5,15 +5,16 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Leave\DecideLeaveRequest;
 use App\Actions\Payroll\ManageOvertime;
 use App\Actions\Workforce\ManageClientAssignmentRequest;
-use App\Enums\EmploymentType;
 use App\Enums\LeaveRequestStatus;
 use App\Enums\PayFrequency;
 use App\Enums\SuperAdminModule;
 use App\Http\Controllers\Controller;
+use App\Models\CashAdvance;
 use App\Models\ClientAssignmentRequest;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeRequest;
 use App\Models\Rate;
+use App\Services\CashAdvances\CashAdvanceBoard;
 use App\Services\Settings\SystemRules;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,15 +26,18 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Super Admin → Requests & Approvals: leave requests (Blueprint §10), the client assignments Admins
- * give contractors, and contractors' overtime tickets. Only the Super Admin approves and sets money.
+ * give contractors, contractors' overtime tickets and cash advances (Blueprint §13). Only the Super
+ * Admin approves and sets money.
  */
 class RequestController extends Controller
 {
-    public function index(Request $request, SystemRules $rules): Response
+    public function index(Request $request, SystemRules $rules, CashAdvanceBoard $cashAdvances): Response
     {
         $filters = $request->validate([
-            'type' => ['nullable', 'in:leave,clients,overtime'],
-            'tab' => ['nullable', 'in:pending,history'],
+            'type' => ['nullable', 'in:leave,clients,overtime,cash-advances'],
+            // Cash advances also have advances being repaid ("active").
+            'tab' => ['nullable', $request->input('type') === 'cash-advances' ? Rule::in(CashAdvanceBoard::TABS) : 'in:pending,history'],
+            'search' => ['nullable', 'string', 'max:100'],
         ]);
         $type = $filters['type'] ?? 'leave';
         $tab = $filters['tab'] ?? 'pending';
@@ -45,20 +49,22 @@ class RequestController extends Controller
             'requests' => $type === 'leave' ? $this->leaveRequests($tab) : [],
             'assignments' => $type === 'clients' ? $this->clientAssignments($tab) : [],
             'overtime' => $type === 'overtime' ? $this->overtimeTickets($tab) : [],
+            'cashAdvances' => $type === 'cash-advances' ? [
+                'advances' => $cashAdvances->advances($tab, $filters['search'] ?? null),
+                'summary' => $cashAdvances->summary(),
+                'filters' => ['type' => 'cash-advances', 'tab' => $tab, 'search' => $filters['search'] ?? ''],
+            ] : null,
             'pendingCount' => LeaveRequest::query()->pending()->count(),
             'pendingAssignments' => ClientAssignmentRequest::query()->pending()->count(),
             'pendingOvertime' => OvertimeRequest::query()->pending()->count(),
+            'pendingCashAdvances' => CashAdvance::query()->pending()->count(),
             'rateDefaults' => [
                 'workingDays' => $rules->integer('default_working_days'),
                 'hoursPerDay' => $rules->integer('default_hours_per_day'),
                 'fullTimeHours' => $rules->integer('full_time_hours'),
                 'partTimeHours' => $rules->integer('part_time_hours'),
             ],
-            // Client assignments are paid per period, never hourly.
-            'payFrequencies' => array_values(array_map(
-                fn (PayFrequency $frequency) => ['value' => $frequency->value, 'label' => $frequency->label()],
-                array_filter(PayFrequency::cases(), fn (PayFrequency $frequency) => $frequency !== PayFrequency::Hourly),
-            )),
+            'payFrequencies' => PayFrequency::options(),
         ]);
     }
 
@@ -90,19 +96,12 @@ class RequestController extends Controller
     {
         $terms = $request->validate([
             'gross_pay' => ['required', 'numeric', 'min:1', 'max:9999999'],
-            'pay_frequency' => ['required', Rule::enum(PayFrequency::class)->except(PayFrequency::Hourly)],
+            'pay_frequency' => ['required', Rule::enum(PayFrequency::class)],
             'effective_date' => ['required', 'date'],
         ]);
 
         // Working days and hours come from System & Rules: hours follow the Full-Time / Part-Time type the Admin chose.
-        $terms['working_days'] = $rules->integer('default_working_days');
-        $terms['hours_per_day'] = match ($assignment->employment_type) {
-            EmploymentType::FullTime => $rules->integer('full_time_hours'),
-            EmploymentType::PartTime => $rules->integer('part_time_hours'),
-            default => $rules->integer('default_hours_per_day'),
-        };
-
-        $manage->approve($request->user(), $assignment, $terms);
+        $manage->approve($request->user(), $assignment, [...$terms, ...$rules->rateTerms($assignment->employment_type)]);
 
         return back()->with('success', 'Client assignment approved with its rate. The Admin has been notified and can now schedule it.');
     }
@@ -228,6 +227,7 @@ class RequestController extends Controller
                 'client' => ['name' => $assignment->clientName(), 'code' => $assignment->client?->client_code, 'isNew' => $assignment->client_id === null],
                 'employmentType' => $assignment->employment_type?->value,
                 'employmentTypeLabel' => $assignment->employment_type?->label(),
+                'breakAllowance' => $assignment->break_allowance_minutes,
                 'startDate' => $assignment->start_date?->toDateString(),
                 'status' => $assignment->status,
                 'statusLabel' => $assignment->statusLabel(),

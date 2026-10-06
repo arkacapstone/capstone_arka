@@ -22,7 +22,7 @@ class CashAdvanceDecided extends ArkaNotification
         $amount = '₱'.number_format((float) $this->advance->amount, 2);
 
         return $this->advance->status === CashAdvanceStatus::Approved
-            ? "Your {$amount} cash advance was released. Repayments show as a separate line on your payslips until it is paid."
+            ? "Your {$amount} cash advance was released. The full amount is deducted from your payslip on ".($this->advance->payday?->format('M j, Y') ?? 'your next payday').'.'
             : "Your {$amount} cash advance request was closed without release. You can talk to the Super Admin about it.";
     }
 

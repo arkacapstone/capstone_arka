@@ -3,6 +3,7 @@
 namespace App\Actions\CashAdvances;
 
 use App\Enums\CashAdvanceStatus;
+use App\Enums\PayrollPeriodStatus;
 use App\Enums\PayrollStatus;
 use App\Models\CashAdvance;
 use App\Models\CashAdvanceRepayment;
@@ -13,7 +14,8 @@ use App\Notifications\CashAdvanceDecided;
 use App\Notifications\CashAdvanceRequested;
 use App\Services\ActivityLogger;
 use App\Services\Notifier;
-use App\Services\Settings\SystemRules;
+use App\Services\Payroll\PayrollCalculator;
+use App\Services\Payroll\PayrollPeriodResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
@@ -24,26 +26,70 @@ use Illuminate\Validation\ValidationException;
  */
 class ManageCashAdvance
 {
+    /**
+     * Payroll stages in which a new cash advance can still be added to the period's payroll.
+     */
+    private const REPAYABLE = [PayrollPeriodStatus::Open, PayrollPeriodStatus::Verification, PayrollPeriodStatus::Locked];
+
     public function __construct(
-        private readonly SystemRules $rules,
         private readonly ActivityLogger $activity,
         private readonly Notifier $notifier,
+        private readonly PayrollCalculator $calculator,
+        private readonly PayrollPeriodResolver $periods,
     ) {}
 
-    public function request(User $employee, float $amount, string $reason, ?User $recordedBy = null): CashAdvance
+    /**
+     * Whether the contractor can request a cash advance today, and for how much: any day of the pay
+     * period they are in, once a month, up to their gross pay for that period. It is repaid in full on
+     * that period's payday. The period need not be created yet; it is projected from System & Rules.
+     *
+     * @return array{open: bool, reason: ?string, period: ?PayrollPeriod, limit: float}
+     */
+    public function window(User $employee, ?CarbonImmutable $today = null): array
     {
-        $max = $this->rules->decimal('cash_advance_max_amount');
+        $today ??= CarbonImmutable::today();
 
-        if ($max > 0 && $amount > $max) {
-            throw ValidationException::withMessages(['amount' => 'The maximum cash advance is ₱'.number_format($max, 2).' (System & Rules).']);
+        // A created period covering today that pays this contractor, otherwise the projected one.
+        $period = PayrollPeriod::query()
+            ->covering($today)
+            ->orderByDesc('start_date')
+            ->get()
+            ->push($this->periods->projectSemiMonthly($today))
+            ->first(fn (PayrollPeriod $period) => PayrollCalculator::ratesFor($period)->where('employee_id', $employee->id)->exists());
+
+        $limit = $period ? PayrollCalculator::grossFor($period, $employee) : 0.0;
+
+        $reason = match (true) {
+            $employee->cashAdvances()->pending()->exists() => 'You already have a request waiting for a decision.',
+            $employee->cashAdvances()
+                ->whereNotIn('status', [CashAdvanceStatus::Rejected, CashAdvanceStatus::Cancelled])
+                ->whereBetween('created_at', [$today->startOfMonth(), $today->endOfMonth()])
+                ->exists() => 'You can get one cash advance a month, and you already have one for '.$today->format('F').'.',
+            $period === null || $limit <= 0 => 'You have no pay in this pay period to repay a cash advance from.',
+            ! in_array($period->status, self::REPAYABLE, true) => "Payroll for {$period->period_name} is already approved. You can ask again in the next pay period.",
+            default => null,
+        };
+
+        return ['open' => $reason === null, 'reason' => $reason, 'period' => $period, 'limit' => round($limit, 2)];
+    }
+
+    public function request(User $employee, float $amount, string $reason): CashAdvance
+    {
+        $window = $this->window($employee);
+
+        if (! $window['open']) {
+            throw ValidationException::withMessages(['amount' => $window['reason']]);
         }
 
-        if ($employee->cashAdvances()->where('status', CashAdvanceStatus::Pending)->exists()) {
-            throw ValidationException::withMessages(['amount' => 'There is already a cash advance request waiting for a decision.']);
+        if ($amount > $window['limit']) {
+            throw ValidationException::withMessages(['amount' => 'The most you can request for this payday is ₱'.number_format($window['limit'], 2).'.']);
         }
 
         $advance = $employee->cashAdvances()->create([
             'amount' => $amount,
+            'requested_amount' => $amount,
+            'gross_pay' => $window['limit'],
+            'payday' => $window['period']->release_date,
             'remaining_balance' => $amount,
             'reason' => $reason,
             'status' => CashAdvanceStatus::Pending,
@@ -51,25 +97,45 @@ class ManageCashAdvance
 
         $this->activity->log('cash-advances', 'Requested cash advance', $advance, "{$employee->name} · ₱".number_format($amount, 2));
 
-        // A request the Super Admin records on someone's behalf needs no alert to themselves.
-        if ($recordedBy === null || ! $recordedBy->isSuperAdmin()) {
-            $this->notifier->superAdmins(new CashAdvanceRequested($advance));
-        }
+        $this->notifier->superAdmins(new CashAdvanceRequested($advance));
 
         return $advance;
     }
 
-    public function approve(User $superAdmin, CashAdvance $advance, CarbonImmutable $releasedOn): CashAdvance
+    /**
+     * The Super Admin releases the advance, for the requested amount or less. It is added to that
+     * period's payroll, so it can no longer be approved once that payroll has been approved.
+     */
+    public function approve(User $superAdmin, CashAdvance $advance, CarbonImmutable $releasedOn, ?float $amount = null): CashAdvance
     {
         $this->ensurePending($advance);
+
+        $requested = (float) ($advance->requested_amount ?? $advance->amount);
+        $amount ??= $requested;
+
+        if ($amount < 1 || $amount > $requested) {
+            throw ValidationException::withMessages(['amount' => 'Approve between ₱1.00 and the requested ₱'.number_format($requested, 2).'.']);
+        }
+
+        // The payroll for that payday, if it has been created.
+        $periods = $advance->payday ? PayrollPeriod::query()->whereDate('release_date', $advance->payday)->get() : collect();
+        $closed = $periods->first(fn (PayrollPeriod $period) => ! in_array($period->status, self::REPAYABLE, true));
+
+        if ($closed) {
+            throw ValidationException::withMessages(['status' => "Payroll for {$closed->period_name} is already approved, so this advance can't be repaid on that payday. Reject it; the contractor can ask again in the next pay period."]);
+        }
 
         $advance->update([
             'status' => CashAdvanceStatus::Approved,
             'approved_by' => $superAdmin->id,
             'approved_at' => now(),
             'released_date' => $releasedOn,
-            'remaining_balance' => $advance->amount,
+            'amount' => $amount,
+            'remaining_balance' => $amount,
         ]);
+
+        // Payroll already calculated: put the repayment on it now.
+        $periods->where('status', PayrollPeriodStatus::Locked)->each(fn (PayrollPeriod $period) => $this->calculator->refreshEmployeeDeductions($period));
 
         return $this->decided($advance, 'Approved and released cash advance');
     }
@@ -105,7 +171,8 @@ class ManageCashAdvance
             ->where('cash_advance_deduction', '>', 0)
             ->get()
             ->each(function (Payroll $row) use ($period) {
-                $left = (float) $row->cash_advance_deduction;
+                // Only what the pay actually covered is repaid; the rest stays owed for the next payday.
+                $left = max(0, round((float) $row->cash_advance_deduction - PayrollCalculator::shortfall($row), 2));
 
                 CashAdvance::query()
                     ->outstanding()

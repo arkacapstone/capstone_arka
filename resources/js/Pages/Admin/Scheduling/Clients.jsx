@@ -16,16 +16,24 @@ const filterSelect =
 
 const requestTone = { pending: 'waiting', approved: 'live', rejected: 'closed' };
 
-function AssignForm({ contractors, clientNames, employmentTypes, hours, taken, onDone }) {
+function AssignForm({ contractors, clientNames, clientBreaks, employmentTypes, hours, taken, onDone }) {
     const { data, setData, post, processing, errors } = useForm({
         employee_id: contractors[0]?.value ?? '',
         client_name: '',
         employment_type: employmentTypes[0]?.value ?? 'full_time',
+        break_allowance_minutes: 60,
         start_date: todayIso(),
     });
 
-    const typed = data.client_name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const normalize = (name) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const typed = normalize(data.client_name);
     const known = clientNames.some((name) => name.toLowerCase() === typed);
+
+    // Picking an existing client fills in its current break allowance.
+    const setClientName = (name) => {
+        const existing = clientBreaks[normalize(name)];
+        setData((current) => ({ ...current, client_name: name, ...(existing !== undefined ? { break_allowance_minutes: existing } : {}) }));
+    };
     const alreadyHas = typed !== '' && (taken[data.employee_id] ?? []).includes(typed);
 
     const submit = (e) => {
@@ -51,7 +59,7 @@ function AssignForm({ contractors, clientNames, employmentTypes, hours, taken, o
                     list="client-names"
                     autoComplete="off"
                     value={data.client_name}
-                    onChange={(e) => setData('client_name', e.target.value)}
+                    onChange={(e) => setClientName(e.target.value)}
                     error={errors.client_name}
                     placeholder="e.g. Aurora Dental"
                     required
@@ -81,6 +89,24 @@ function AssignForm({ contractors, clientNames, employmentTypes, hours, taken, o
                 options={employmentTypes.map((type) => ({ ...type, label: `${type.label} · ${hours[type.value]} hours a day` }))}
             />
 
+            <div>
+                <Field
+                    id="break_allowance_minutes"
+                    type="number"
+                    min="0"
+                    max="240"
+                    label="Break allowance (minutes)"
+                    value={data.break_allowance_minutes}
+                    onChange={(e) => setData('break_allowance_minutes', e.target.value)}
+                    error={errors.break_allowance_minutes}
+                    required
+                />
+                <p className="mt-1.5 text-xs text-console-muted">
+                    For this client, the same for every contractor on it (Full-Time or Part-Time). Shown on the Time Tracker for awareness only; going over never
+                    reduces pay.
+                </p>
+            </div>
+
             <Field
                 id="start_date"
                 type="date"
@@ -107,7 +133,7 @@ function AssignForm({ contractors, clientNames, employmentTypes, hours, taken, o
     );
 }
 
-export default function Clients({ assignments, requests, filters, contractors, clients, clientNames, employmentTypes, hours, taken }) {
+export default function Clients({ assignments, requests, filters, contractors, clients, clientNames, clientBreaks, employmentTypes, hours, taken }) {
     const { search, setSearch, apply } = useFilters('admin.scheduling.clients.index', filters);
     const [assigning, setAssigning] = useState(false);
 
@@ -238,6 +264,7 @@ export default function Clients({ assignments, requests, filters, contractors, c
                     <AssignForm
                         contractors={contractors}
                         clientNames={clientNames}
+                        clientBreaks={clientBreaks}
                         employmentTypes={employmentTypes}
                         hours={hours}
                         taken={taken}

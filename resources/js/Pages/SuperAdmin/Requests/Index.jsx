@@ -3,6 +3,7 @@ import { ConsoleButton, TextAreaField } from '@/Components/Console/Field';
 import Panel, { PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge, { Tag } from '@/Components/Console/StatusBadge';
 import { EyeIcon } from '@/Components/Icons';
+import CashAdvanceRequests from '@/Components/Requests/CashAdvanceRequests';
 import ConfirmDialog from '@/Components/Workforce/ConfirmDialog';
 import RateForm from '@/Components/Workforce/RateForm';
 import Table, { Cell, Row } from '@/Components/Workforce/Table';
@@ -16,7 +17,20 @@ const tabClass = (active) =>
         active ? 'border-arka-teal text-arka-teal' : 'border-transparent text-console-muted hover:text-arka-teal'
     }`;
 
-export default function Index({ type, tab, requests, assignments, overtime, pendingCount, pendingAssignments, pendingOvertime, rateDefaults, payFrequencies }) {
+export default function Index({
+    type,
+    tab,
+    requests,
+    assignments,
+    overtime,
+    cashAdvances,
+    pendingCount,
+    pendingAssignments,
+    pendingOvertime,
+    pendingCashAdvances,
+    rateDefaults,
+    payFrequencies,
+}) {
     return (
         <SuperAdminLayout title="Requests & Approvals">
             <div className="mx-auto flex max-w-[1560px] flex-col gap-8">
@@ -25,6 +39,7 @@ export default function Index({ type, tab, requests, assignments, overtime, pend
                         ['leave', `Leave requests (${pendingCount})`],
                         ['clients', `Client assignments (${pendingAssignments})`],
                         ['overtime', `Overtime (${pendingOvertime})`],
+                        ['cash-advances', `Cash advances (${pendingCashAdvances})`],
                     ].map(([value, label]) => (
                         <Link
                             key={value}
@@ -39,7 +54,9 @@ export default function Index({ type, tab, requests, assignments, overtime, pend
                     ))}
                 </div>
 
-                {type === 'overtime' ? (
+                {type === 'cash-advances' ? (
+                    <CashAdvanceRequests tab={tab} advances={cashAdvances.advances} filters={cashAdvances.filters} summary={cashAdvances.summary} />
+                ) : type === 'overtime' ? (
                     <OvertimeTickets tab={tab} tickets={overtime} pendingCount={pendingOvertime} />
                 ) : type === 'clients' ? (
                     <ClientAssignments tab={tab} assignments={assignments} pendingCount={pendingAssignments} rateDefaults={rateDefaults} payFrequencies={payFrequencies} />
@@ -115,6 +132,7 @@ function ClientAssignments({ tab, assignments, pendingCount, rateDefaults, payFr
                                         {assignment.employmentTypeLabel}
                                     </Tag>
                                 )}
+                                <p className="mt-1 font-mono text-xs text-console-dim">{assignment.breakAllowance} min break</p>
                             </Cell>
                             <Cell className="font-mono">{fullDate(assignment.startDate)}</Cell>
                             <Cell className="text-xs text-console-muted">

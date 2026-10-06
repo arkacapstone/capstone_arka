@@ -84,7 +84,7 @@ export default function Index({ logs, filters, modules, users, summary }) {
 
                     <div className="mt-6">
                         <Table
-                            columns={['When', 'Module', 'Action', 'Details', 'Done by', 'IP address']}
+                            columns={['When', 'Module', 'Action', 'Details', 'Done by']}
                             actions={false}
                             isEmpty={logs.data.length === 0}
                             emptyMessage={filtered ? 'No activity matches these filters.' : 'No activity recorded yet.'}
@@ -114,7 +114,6 @@ export default function Index({ logs, filters, modules, users, summary }) {
                                             <span className="text-console-muted">System</span>
                                         )}
                                     </Cell>
-                                    <Cell className="font-mono text-xs text-console-muted">{log.ipAddress ?? '—'}</Cell>
                                 </Row>
                             ))}
                         </Table>

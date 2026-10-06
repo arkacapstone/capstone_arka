@@ -4,15 +4,45 @@ import { dateRange, shortDate } from '@/lib/format';
 import { Link } from '@inertiajs/react';
 import { StageActions, Stepper, Totals } from './PayrollStages';
 
+/**
+ * Choose which pay frequency the overview shows (Weekly, Semi-monthly, Monthly).
+ * `picker` = { value, options, onChange }.
+ */
+export function FrequencyPicker({ picker }) {
+    return (
+        <select
+            aria-label="Pay frequency"
+            value={picker.value}
+            onChange={(e) => picker.onChange(e.target.value)}
+            className="ml-2 border border-arka-teal bg-transparent py-1 pl-3 pr-8 align-middle text-sm font-medium text-console-heading transition-colors hover:bg-arka-teal/10 focus:border-arka-teal focus:ring-1 focus:ring-arka-teal"
+        >
+            {picker.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                    {option.label}
+                </option>
+            ))}
+        </select>
+    );
+}
+
 /** The current payroll period: where it stands, what it pays out, and its next step. */
-export default function PayrollOverviewCard({ overview, showOpenLink = true }) {
+export default function PayrollOverviewCard({ overview, showOpenLink = true, frequencyPicker = null }) {
     const { period, totals, records } = overview;
 
     return (
         <Panel>
             <PanelHeading
                 title="Payroll overview"
-                subtitle={`${dateRange(period.startDate, period.endDate)} · ${period.frequency}`}
+                subtitle={
+                    frequencyPicker ? (
+                        <>
+                            {dateRange(period.startDate, period.endDate)}
+                            <FrequencyPicker picker={frequencyPicker} />
+                        </>
+                    ) : (
+                        `${dateRange(period.startDate, period.endDate)} · ${period.frequency}`
+                    )
+                }
                 action={
                     <span className="border border-console-heading/40 px-2.5 py-1 font-mono text-xs text-console-heading">
                         Cutoff {shortDate(period.cutoffDate)} · Release {shortDate(period.releaseDate)}

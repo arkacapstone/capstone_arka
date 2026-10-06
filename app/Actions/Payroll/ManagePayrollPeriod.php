@@ -119,10 +119,10 @@ class ManagePayrollPeriod
     }
 
     /**
-     * Review adjustments while attendance is locked: additional hours, days absent (e.g. half days),
-     * cash advance repayment and other approved deductions.
+     * Review adjustments while attendance is locked: additional hours, days absent (e.g. half days)
+     * and other approved deductions. Cash advance repayment is always automatic.
      *
-     * @param  array{additional_minutes: int, days_absent: numeric, cash_advance_deduction: numeric, other_deductions: numeric}  $adjustments
+     * @param  array{additional_minutes: int, days_absent: numeric, other_deductions: numeric}  $adjustments
      */
     public function adjust(Payroll $row, array $adjustments): Payroll
     {

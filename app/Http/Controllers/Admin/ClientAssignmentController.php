@@ -72,6 +72,9 @@ class ClientAssignmentController extends Controller
                 ->map(fn (Client $client) => ['value' => $client->id, 'label' => $client->client_name])->all(),
             // Suggestions while typing: every client Admins have added before.
             'clientNames' => Client::query()->orderBy('client_name')->pluck('client_name')->unique()->values()->all(),
+            // Each existing client's break allowance (lower-case name → minutes), filled in when it is picked.
+            'clientBreaks' => Client::query()->orderBy('id')->get(['client_name', 'break_allowance_minutes'])
+                ->mapWithKeys(fn (Client $client) => [mb_strtolower(trim($client->client_name)) => $client->break_allowance_minutes])->all(),
             'employmentTypes' => EmploymentType::options(),
             'hours' => ['full_time' => $rules->integer('full_time_hours'), 'part_time' => $rules->integer('part_time_hours')],
             // What each contractor already has or is waiting for (lower-case names), to warn before sending.
@@ -85,8 +88,9 @@ class ClientAssignmentController extends Controller
             'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'client_name' => ['required', 'string', 'min:2', 'max:100'],
             'employment_type' => ['required', Rule::enum(EmploymentType::class)],
+            'break_allowance_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             'start_date' => ['required', 'date', 'after_or_equal:today'],
-        ], ['start_date.after_or_equal' => 'The start date cannot be in the past.'], attributes: ['employee_id' => 'contractor', 'client_name' => 'client name', 'employment_type' => 'Full-Time / Part-Time', 'start_date' => 'start date']);
+        ], ['start_date.after_or_equal' => 'The start date cannot be in the past.'], attributes: ['employee_id' => 'contractor', 'client_name' => 'client name', 'employment_type' => 'Full-Time / Part-Time', 'break_allowance_minutes' => 'break allowance', 'start_date' => 'start date']);
 
         $manage->submit($request->user(), $validated);
 

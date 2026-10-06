@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\ScheduleChanged;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class SchedulingTest extends TestCase
@@ -43,7 +44,6 @@ class SchedulingTest extends TestCase
             'working_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'start_time' => '22:00',
             'end_time' => '06:00',
-            'break_allowance_minutes' => 60,
             'start_date' => '2026-09-28',
             ...$overrides,
         ];
@@ -192,5 +192,19 @@ class SchedulingTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('inactive', $schedule->refresh()->status);
+    }
+
+    public function test_the_schedule_list_filters_by_status(): void
+    {
+        $active = Schedule::factory()->for($this->employee, 'employee')->for($this->client)->create();
+        $inactive = Schedule::factory()->for($this->employee, 'employee')->for($this->client)->create(['status' => 'inactive']);
+
+        // Contractors have a status too; the filter must use the schedule's.
+        foreach (['active' => $active, 'inactive' => $inactive] as $status => $schedule) {
+            $this->actingAs($this->admin)
+                ->get(route('admin.scheduling.index', ['status' => $status]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->has('schedules.data', 1)->where('schedules.data.0.id', $schedule->id));
+        }
     }
 }

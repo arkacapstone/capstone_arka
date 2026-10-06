@@ -73,7 +73,10 @@ class EmployeePayslips
             ...$rows->map(fn (Payroll $row, int $index) => [
                 'label' => ($index === 0 ? 'Gross Pay' : 'Additional Pay')." ({$client($row)})",
                 'amount' => (float) $row->gross_pay,
-            ])->all(),
+            ])
+                // A client with no pay of its own (e.g. hours paid as Additional at another client's rate) adds no ₱0.00 line.
+                ->filter(fn (array $line, int $index) => $index === 0 || $line['amount'] > 0)
+                ->values()->all(),
             // Rewards with an amount (Performance & Rewards) are Additional Pay too.
             ...$rows->flatMap(fn (Payroll $row) => $row->rewards)->map(fn (Reward $reward) => [
                 'label' => "Additional Pay (Reward · {$reward->reward_type})",

@@ -26,7 +26,6 @@ class RuleController extends Controller
     public const GROUPS = [
         'payroll' => ['title' => 'Payroll rules', 'subtitle' => 'Defaults used when rates are created and pay is computed.'],
         'deductions' => ['title' => 'Administrative & device deductions', 'subtitle' => 'Which deductions payroll applies. Tithes and devotional penalties are never deducted.'],
-        'cash_advances' => ['title' => 'Cash advance rules', 'subtitle' => 'The most a contractor can ask for. The full amount comes off their next payslip.'],
         'time_tracking' => ['title' => 'Time tracking', 'subtitle' => 'When contractors can start a timer. It stops by itself at the end of the shift; overtime goes through a ticket.'],
         'cutoff' => ['title' => 'Payroll cutoff & release', 'subtitle' => 'The semi-monthly cycle used to create new payroll periods.'],
         'system' => ['title' => 'Basic system configuration', 'subtitle' => 'General details shown across ARKA.'],

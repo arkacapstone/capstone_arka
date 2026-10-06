@@ -63,7 +63,6 @@ class ActivityLogController extends Controller
                 'action' => $log->action,
                 'details' => $log->details,
                 'user' => $log->user ? ['name' => $log->user->name, 'code' => $log->user->employee_code, 'role' => $log->user->role?->label()] : null,
-                'ipAddress' => $log->ip_address,
                 'createdAt' => $log->created_at->toIso8601String(),
             ]);
 

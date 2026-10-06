@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\RateRequest;
 use App\Models\Rate;
 use App\Models\User;
+use App\Services\Settings\SystemRules;
 use Illuminate\Http\RedirectResponse;
 
 /**
@@ -16,9 +17,12 @@ use Illuminate\Http\RedirectResponse;
  */
 class EmployeeRateController extends Controller
 {
-    public function update(RateRequest $request, User $account, Rate $rate, ChangeRate $changeRate): RedirectResponse
+    public function update(RateRequest $request, User $account, Rate $rate, ChangeRate $changeRate, SystemRules $rules): RedirectResponse
     {
-        $changeRate->handle($this->rateOf($account, $rate), $request->validated());
+        $rate = $this->rateOf($account, $rate);
+
+        // Working days and hours are set only in System & Rules, never on the rate form.
+        $changeRate->handle($rate, [...$request->validated(), ...$rules->rateTerms($rate->employment_type)]);
 
         return back()->with('success', 'Rate updated. The previous rate is kept in history.');
     }

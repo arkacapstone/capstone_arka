@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -72,14 +73,30 @@ class DeviceController extends Controller
             ],
             'contractors' => User::query()->workforce()->active()->orderBy('name')->get(['id', 'name', 'employee_code'])
                 ->map(fn (User $user) => ['value' => $user->id, 'label' => "{$user->name} ({$user->employee_code})"])->all(),
+            'types' => Device::TYPES,
         ]);
     }
 
     public function store(Request $request, ManageDevices $manage): RedirectResponse
     {
-        $manage->create($this->validateDevice($request));
+        $device = $this->validateDevice($request);
+        // Optionally hand it to a contractor right away.
+        $assignment = $request->validate([
+            'employee_id' => ['nullable', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
+            'assigned_date' => ['nullable', 'required_with:employee_id', 'date'],
+        ], attributes: ['employee_id' => 'contractor', 'assigned_date' => 'given on']);
 
-        return back()->with('success', 'Device added.');
+        $created = DB::transaction(function () use ($manage, $device, $assignment) {
+            $created = $manage->create($device);
+
+            if (filled($assignment['employee_id'] ?? null)) {
+                $manage->assign($created, User::findOrFail($assignment['employee_id']), CarbonImmutable::parse($assignment['assigned_date']));
+            }
+
+            return $created;
+        });
+
+        return back()->with('success', $created->status === Device::STATUS_ASSIGNED ? 'Device added and assigned.' : 'Device added.');
     }
 
     public function update(Request $request, Device $device, ManageDevices $manage): RedirectResponse
@@ -124,7 +141,7 @@ class DeviceController extends Controller
     {
         return $request->validate([
             'device_name' => ['required', 'string', 'max:255'],
-            'device_type' => ['nullable', 'string', 'max:100'],
+            'device_type' => ['required', Rule::in(Device::TYPES)],
             'serial_number' => ['nullable', 'string', 'max:255', Rule::unique(Device::class)->ignore($device)],
             'value' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
         ], attributes: ['device_name' => 'device name', 'device_type' => 'type', 'serial_number' => 'serial number']);

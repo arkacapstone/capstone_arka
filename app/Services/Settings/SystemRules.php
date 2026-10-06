@@ -2,6 +2,7 @@
 
 namespace App\Services\Settings;
 
+use App\Enums\EmploymentType;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -41,8 +42,7 @@ class SystemRules
 
             // Device loss: no fixed amount or cap. A lost device is deducted at its own value (Workforce → Devices).
 
-            // Cash advance deduction rules
-            'cash_advance_max_amount' => ['table' => self::PAYROLL, 'group' => 'cash_advances', 'label' => 'Maximum cash advance (₱)', 'type' => 'decimal', 'default' => 10000, 'min' => 0, 'max' => 10000000, 'description' => 'Largest single cash advance that can be requested.'],
+            // Cash advances have no setting: one a month, up to that pay period's gross pay, repaid in full on its payday.
 
             // Time tracking
             'timer_early_start_minutes' => ['table' => self::PAYROLL, 'group' => 'time_tracking', 'label' => 'Start timer early (minutes)', 'type' => 'integer', 'default' => 10, 'min' => 0, 'max' => 60, 'description' => 'How long before the shift starts a contractor may start the timer. No timer can be started after the shift ends.'],
@@ -72,6 +72,24 @@ class SystemRules
     public function integer(string $key): int
     {
         return (int) $this->get($key);
+    }
+
+    /**
+     * Working days and hours per day for a rate. They are set only here, never on the rate form:
+     * hours follow the client's Full-Time / Part-Time type.
+     *
+     * @return array{working_days: int, hours_per_day: int}
+     */
+    public function rateTerms(?EmploymentType $type): array
+    {
+        return [
+            'working_days' => $this->integer('default_working_days'),
+            'hours_per_day' => match ($type) {
+                EmploymentType::FullTime => $this->integer('full_time_hours'),
+                EmploymentType::PartTime => $this->integer('part_time_hours'),
+                default => $this->integer('default_hours_per_day'),
+            },
+        ];
     }
 
     public function decimal(string $key): float

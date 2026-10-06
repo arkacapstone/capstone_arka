@@ -1,11 +1,12 @@
-import Panel, { Eyebrow, PanelHeading } from '@/Components/Console/Panel';
+import Dialog from '@/Components/Console/Dialog';
+import Field, { ConsoleButton } from '@/Components/Console/Field';
+import Panel, { Eyebrow, MetricRow, PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
 import ConfirmDialog from '@/Components/Workforce/ConfirmDialog';
 import Table, { Cell, Row } from '@/Components/Workforce/Table';
 import useFilters, { SearchInput } from '@/Components/Workforce/useFilters';
-import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import { fullDate, peso, timeAgo } from '@/lib/format';
-import { Link, router } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
 const statusTone = { approved: 'running', repaid: 'completed' };
@@ -20,17 +21,70 @@ function Figure({ label, value }) {
 }
 
 /**
- * Contractors file cash advances with the amount; the Super Admin only approves or rejects.
- * Once approved, repayment is deducted from that contractor's payroll automatically.
+ * Approve the requested amount, or (custom) a lower amount the Super Admin types in. It is released
+ * today and deducted in full on that payday.
  */
-export default function Index({ tab, advances, filters, summary, rules }) {
-    const { search, setSearch } = useFilters('super-admin.cash-advances', filters);
-    const [decision, setDecision] = useState(null); // {type: 'approve'|'reject', advance}
+function ApproveDialog({ advance, custom, onClose }) {
+    const { data, setData, post, processing, errors } = useForm({ amount: custom ? '' : (advance?.requestedAmount ?? '') });
+
+    const submit = (e) => {
+        e.preventDefault();
+        post(route('super-admin.cash-advances.approve', advance.id), { preserveScroll: true, onSuccess: onClose });
+    };
+
+    return (
+        <Dialog open={advance !== null} onClose={onClose} title={custom ? 'Approve a different amount' : 'Approve this cash advance?'}>
+            {advance && (
+                <form onSubmit={submit} className="flex flex-col gap-5">
+                    <div className="border-t border-console-line">
+                        <MetricRow label="Contractor" value={advance.employee.name} />
+                        <MetricRow label="Requested" value={peso(advance.requestedAmount)} />
+                        {advance.grossPay !== null && <MetricRow label="Gross pay this pay period" value={peso(advance.grossPay)} />}
+                        {advance.payday && <MetricRow label="Deducted on payday" value={fullDate(advance.payday)} />}
+                    </div>
+                    {custom && (
+                        <Field
+                            id="amount"
+                            label="Amount to release (₱)"
+                            type="number"
+                            min="1"
+                            step="0.01"
+                            max={advance.requestedAmount}
+                            placeholder={`Up to ${peso(advance.requestedAmount)}`}
+                            value={data.amount}
+                            onChange={(e) => setData('amount', e.target.value)}
+                            error={errors.amount ?? errors.status}
+                            autoFocus
+                            required
+                        />
+                    )}
+                    {!custom && (errors.amount || errors.status) && <p className="text-[13px] text-console-heading">{errors.amount ?? errors.status}</p>}
+                    <p className="text-[13px] text-console-muted">
+                        {advance.employee.name} receives {custom ? 'this amount' : peso(advance.requestedAmount)} today. The full amount is deducted from that payday's payslip, and they
+                        will be notified.
+                    </p>
+                    <ConsoleButton type="submit" disabled={processing}>
+                        {custom ? 'Approve this amount' : `Approve ${peso(advance.requestedAmount)}`}
+                    </ConsoleButton>
+                </form>
+            )}
+        </Dialog>
+    );
+}
+
+/**
+ * Contractors file cash advances with the amount; the Super Admin approves (for that amount or less)
+ * or rejects. Once approved, repayment is deducted from that payday's payroll automatically.
+ */
+export default function CashAdvanceRequests({ tab, advances, filters, summary }) {
+    const { search, setSearch } = useFilters('super-admin.requests', filters);
+    const [decision, setDecision] = useState(null); // {advance} being rejected
+    const [approving, setApproving] = useState(null);
     const [expanded, setExpanded] = useState(null);
     const [processing, setProcessing] = useState(false);
 
-    const decide = () =>
-        router.post(route(`super-admin.cash-advances.${decision.type}`, decision.advance.id), {}, {
+    const reject = () =>
+        router.post(route('super-admin.cash-advances.reject', decision.advance.id), {}, {
             preserveScroll: true,
             onStart: () => setProcessing(true),
             onFinish: () => {
@@ -44,8 +98,8 @@ export default function Index({ tab, advances, filters, summary, rules }) {
     const lastColumn = { pending: 'Decision', active: 'Next payslip', history: 'Decided by' }[tab];
 
     return (
-        <SuperAdminLayout title="Cash Advances">
-            <div className="mx-auto flex max-w-[1560px] flex-col gap-8">
+        <>
+            <div className="flex flex-col gap-8">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Figure label="Waiting for decision" value={summary.pending} />
                     <Figure label="Outstanding balance" value={peso(summary.outstanding)} />
@@ -56,7 +110,7 @@ export default function Index({ tab, advances, filters, summary, rules }) {
                 <Panel>
                     <PanelHeading
                         title="Cash advances"
-                        subtitle={`Contractors request the amount (up to ${peso(rules.maxAmount)}, set in System & Rules); only the Super Admin approves. The money is released right away and the full amount is deducted from the contractor's very next payslip.`}
+                        subtitle={`Contractors can ask once a month, any day before payday, for up to their gross pay for that pay period. You decide how much to release; it is released right away and the full amount is deducted from that payday's payslip.`}
                     />
 
                     <div className="mt-6 flex flex-wrap items-end justify-between gap-4 border-b border-console-line">
@@ -68,7 +122,7 @@ export default function Index({ tab, advances, filters, summary, rules }) {
                             ].map(([value, label]) => (
                                 <Link
                                     key={value}
-                                    href={route('super-admin.cash-advances', { ...(value === 'pending' ? {} : { tab: value }), ...(filters.search ? { search: filters.search } : {}) })}
+                                    href={route('super-admin.requests', { type: 'cash-advances', ...(value === 'pending' ? {} : { tab: value }), ...(filters.search ? { search: filters.search } : {}) })}
                                     preserveScroll
                                     className={`-mb-px border-b-2 px-4 py-2 font-condensed text-[15px] font-semibold transition-colors ${
                                         tab === value ? 'border-arka-teal text-arka-teal' : 'border-transparent text-console-muted hover:text-arka-teal'
@@ -98,8 +152,9 @@ export default function Index({ tab, advances, filters, summary, rules }) {
                                     perPayroll={perPayroll(advance)}
                                     expanded={expanded === advance.id}
                                     onToggle={() => setExpanded(expanded === advance.id ? null : advance.id)}
-                                    onApprove={() => setDecision({ type: 'approve', advance })}
-                                    onReject={() => setDecision({ type: 'reject', advance })}
+                                    onApprove={() => setApproving({ advance, custom: false })}
+                                    onChangeAmount={() => setApproving({ advance, custom: true })}
+                                    onReject={() => setDecision({ advance })}
                                 />
                             ))}
                         </Table>
@@ -107,27 +162,28 @@ export default function Index({ tab, advances, filters, summary, rules }) {
                 </Panel>
             </div>
 
+            <ApproveDialog
+                key={approving ? `${approving.advance.id}-${approving.custom}` : 'none'}
+                advance={approving?.advance ?? null}
+                custom={approving?.custom ?? false}
+                onClose={() => setApproving(null)}
+            />
+
             <ConfirmDialog
                 open={decision !== null}
-                title={decision?.type === 'approve' ? 'Approve this cash advance?' : 'Reject this cash advance?'}
-                body={
-                    decision
-                        ? decision.type === 'approve'
-                            ? `${decision.advance.employee.name} receives ${peso(decision.advance.amount)} today. The full ${peso(decision.advance.amount)} is deducted from their next payslip. They will be notified.`
-                            : `${decision.advance.employee.name}'s request for ${peso(decision.advance.amount)} is closed. They will be notified.`
-                        : ''
-                }
-                confirmLabel={decision?.type === 'approve' ? 'Approve' : 'Reject request'}
-                danger={decision?.type === 'reject'}
+                title="Reject this cash advance?"
+                body={decision ? `${decision.advance.employee.name}'s request for ${peso(decision.advance.amount)} is closed. They will be notified.` : ''}
+                confirmLabel="Reject request"
+                danger
                 processing={processing}
-                onConfirm={decide}
+                onConfirm={reject}
                 onClose={() => setDecision(null)}
             />
-        </SuperAdminLayout>
+        </>
     );
 }
 
-function AdvanceRow({ advance, tab, perPayroll, expanded, onToggle, onApprove, onReject }) {
+function AdvanceRow({ advance, tab, perPayroll, expanded, onToggle, onApprove, onChangeAmount, onReject }) {
     return (
         <>
             <Row>
@@ -139,7 +195,11 @@ function AdvanceRow({ advance, tab, perPayroll, expanded, onToggle, onApprove, o
                     {fullDate(advance.requestedAt.slice(0, 10))}
                     <p className="text-xs text-console-dim">{timeAgo(advance.requestedAt)}</p>
                 </Cell>
-                <Cell className="font-mono">{peso(advance.amount)}</Cell>
+                <Cell className="font-mono">
+                    {peso(advance.amount)}
+                    {advance.requestedAmount !== advance.amount && <p className="text-xs text-console-dim">asked {peso(advance.requestedAmount)}</p>}
+                    {advance.payday && <p className="text-xs text-console-dim">payday {fullDate(advance.payday)}</p>}
+                </Cell>
                 <Cell className="font-mono">
                     {advance.releasedDate ? peso(advance.repaid) : '—'}
                     {advance.repayments.length > 0 && (
@@ -164,6 +224,11 @@ function AdvanceRow({ advance, tab, perPayroll, expanded, onToggle, onApprove, o
                                 Reject
                             </button>
                         </div>
+                    )}
+                    {tab === 'pending' && (
+                        <button type="button" onClick={onChangeAmount} className="mt-2 text-xs text-arka-teal hover:underline">
+                            Change amount
+                        </button>
                     )}
                     {tab === 'active' && (
                         <span className="font-mono text-xs text-console-text">

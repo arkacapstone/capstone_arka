@@ -127,7 +127,6 @@ class NotificationCenterTest extends TestCase
             'working_days' => ['mon', 'tue'],
             'start_time' => '10:00',
             'end_time' => '14:00',
-            'break_allowance_minutes' => 60,
             'start_date' => now()->toDateString(),
         ])->assertSessionHasNoErrors();
 

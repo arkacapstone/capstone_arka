@@ -47,6 +47,7 @@ class ManageClientAssignmentRequest
             'client_id' => $client?->id,
             'client_name' => $client?->client_name ?? $name,
             'employment_type' => $details['employment_type'],
+            'break_allowance_minutes' => $details['break_allowance_minutes'] ?? Client::DEFAULT_BREAK_ALLOWANCE,
             'start_date' => $details['start_date'],
             'requested_by' => $admin->id,
             'status' => ClientAssignmentRequest::STATUS_PENDING,
@@ -68,6 +69,8 @@ class ManageClientAssignmentRequest
 
         DB::transaction(function () use ($superAdmin, $request, $terms) {
             $client = $this->resolveClient($request);
+            // The break allowance follows the client: it applies to everyone on it, Full-Time or Part-Time.
+            $client->update(['break_allowance_minutes' => $request->break_allowance_minutes]);
 
             $rate = $this->assignClientRate->handle($request->employee, [
                 ...$terms,

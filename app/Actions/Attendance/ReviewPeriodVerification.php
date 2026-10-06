@@ -3,14 +3,17 @@
 namespace App\Actions\Attendance;
 
 use App\Enums\PayrollPeriodStatus;
+use App\Models\AttendanceVerification;
 use App\Models\PayrollPeriod;
 use App\Models\User;
+use App\Notifications\AttendanceAutoSubmitted;
 use App\Notifications\VerificationReminder;
 use App\Notifications\VerifiedPeriodSubmitted;
 use App\Services\ActivityLogger;
 use App\Services\Notifier;
 use App\Services\Payroll\PayrollCalculator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
@@ -51,15 +54,23 @@ class ReviewPeriodVerification
             return 'This period was already submitted to the Super Admin.';
         }
 
+        return null;
+    }
+
+    /**
+     * Not a blocker: the Admin may submit before everyone has, but those contractors can no longer
+     * fix or submit, and their recorded attendance is used as is.
+     */
+    public static function submitWarning(PayrollPeriod $period): ?string
+    {
         $waiting = self::notSubmitted($period)->count();
 
-        // The Admin submits last: after everyone has submitted, or once fixing has closed for the rest.
-        if ($waiting > 0 && $period->fixWindowOpen()) {
-            return ($waiting === 1 ? '1 contractor has' : "{$waiting} contractors have")
-                .' not submitted yet. Send a reminder, or submit after fixing closes at '.$period->fixDeadline()->format('g:i A, M j').'.';
+        if ($waiting === 0 || self::submitBlocker($period) !== null) {
+            return null;
         }
 
-        return null;
+        return ($waiting === 1 ? '1 contractor has' : "{$waiting} contractors have")
+            .' not submitted yet. If you submit now, they are submitted automatically with their attendance as recorded.';
     }
 
     /**
@@ -89,10 +100,23 @@ class ReviewPeriodVerification
             throw ValidationException::withMessages(['period' => $blocker]);
         }
 
-        $period->update(['admin_submitted_at' => now(), 'admin_submitted_by' => $admin->id]);
+        $notSubmitted = self::notSubmitted($period);
 
-        $this->activity->log('attendance', 'Submitted verified period to the Super Admin', $period, $period->period_name);
+        DB::transaction(function () use ($admin, $period, $notSubmitted) {
+            $period->update(['admin_submitted_at' => now(), 'admin_submitted_by' => $admin->id]);
+
+            // Whoever never submitted is submitted with their attendance as recorded: not fixing it was their responsibility.
+            foreach ($notSubmitted as $contractor) {
+                AttendanceVerification::query()->updateOrCreate(
+                    ['period_id' => $period->id, 'employee_id' => $contractor->id],
+                    ['verified_at' => now(), 'auto_submitted' => true],
+                );
+            }
+        });
+
+        $this->activity->log('attendance', 'Submitted verified period to the Super Admin', $period, "{$period->period_name} · {$notSubmitted->count()} auto-submitted");
         $this->notifier->superAdmins(new VerifiedPeriodSubmitted($period, $admin));
+        Notification::send($notSubmitted, new AttendanceAutoSubmitted($period));
 
         return $period;
     }

@@ -55,10 +55,10 @@ function PeriodVerification({ verification }) {
                     </p>
                     {period.adminSubmittedAt ? (
                         <Tag tone="live">Submitted to Super Admin · {dateTime(period.adminSubmittedAt)}</Tag>
+                    ) : period.status === 'verification' && counts.waiting > 0 ? (
+                        <Tag tone="waiting">{counts.waiting} not submitted yet</Tag>
                     ) : period.canSubmit ? (
                         <Tag tone="live">Ready to submit</Tag>
-                    ) : period.status === 'verification' ? (
-                        <Tag tone="waiting">{counts.waiting} not submitted yet</Tag>
                     ) : null}
                 </div>
             )}

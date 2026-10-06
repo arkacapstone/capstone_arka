@@ -33,10 +33,24 @@ class PayrollController extends Controller
      */
     public function index(Request $request, PayrollPeriodResolver $resolver): Response
     {
-        $tab = $request->validate(['tab' => ['nullable', Rule::in(['overview', 'periods', 'verification'])]])['tab'] ?? 'overview';
+        $filters = $request->validate([
+            'tab' => ['nullable', Rule::in(['overview', 'periods', 'verification'])],
+            // The overview shows one pay frequency at a time; Semi-monthly is the default cycle.
+            'frequency' => ['nullable', Rule::enum(PayFrequency::class)],
+        ]);
+        $tab = $filters['tab'] ?? 'overview';
+        $frequency = PayFrequency::tryFrom($filters['frequency'] ?? '') ?? PayFrequency::SemiMonthly;
 
         $today = CarbonImmutable::today();
-        $current = $resolver->current($today);
+        $current = $resolver->currentFor($frequency, $today);
+        $semiMonthly = $frequency === PayFrequency::SemiMonthly ? $current : $resolver->currentFor(PayFrequency::SemiMonthly, $today);
+
+        // While the current period has no payroll yet, the overview shows the latest period of the same
+        // frequency that does; the current period stays reachable (to open verification) above it.
+        $latestWithPayroll = $current === null || ($current->exists && $current->payrolls()->exists())
+            ? null
+            : PayrollPeriod::query()->where('pay_frequency', $frequency)->has('payrolls')->orderByDesc('end_date')->orderByDesc('id')->first();
+        $shown = $latestWithPayroll ?? $current;
 
         $periods = PayrollPeriod::query()
             ->withSum('payrolls', 'net_pay')
@@ -51,6 +65,7 @@ class PayrollController extends Controller
                 'cutoffDate' => $period->cutoff_date->toDateString(),
                 'releaseDate' => $period->release_date->toDateString(),
                 'frequency' => $period->pay_frequency->label(),
+                'frequencyValue' => $period->pay_frequency->value,
                 'status' => $period->status->value,
                 'statusLabel' => $period->status->label(),
                 'net' => round((float) $period->payrolls_sum_net_pay, 2),
@@ -58,17 +73,21 @@ class PayrollController extends Controller
 
         return Inertia::render('SuperAdmin/Payroll/Index', [
             'tab' => $tab,
-            'current' => (new PayrollOverviewWidget($current, $today))->data(),
+            'frequency' => $frequency->value,
+            // Null when no period of this frequency has been created yet.
+            'current' => $shown ? (new PayrollOverviewWidget($shown, $today))->data() : null,
+            'upcoming' => $latestWithPayroll ? (new PayrollOverviewWidget($current, $today))->data() : null,
             'periods' => $periods->all(),
             // View-only: the Admin already reviewed the contractors' changes.
             'verification' => (new VerificationResultsWidget(withChanges: false))->data(),
             'frequencies' => $this->frequencies(),
-            'suggested' => $current->exists ? null : [
-                'start_date' => $current->start_date->toDateString(),
-                'end_date' => $current->end_date->toDateString(),
-                'cutoff_date' => $current->cutoff_date->toDateString(),
-                'release_date' => $current->release_date->toDateString(),
-                'pay_frequency' => $current->pay_frequency->value,
+            // New period is pre-filled with the projected semi-monthly period while it isn't created yet.
+            'suggested' => $semiMonthly->exists ? null : [
+                'start_date' => $semiMonthly->start_date->toDateString(),
+                'end_date' => $semiMonthly->end_date->toDateString(),
+                'cutoff_date' => $semiMonthly->cutoff_date->toDateString(),
+                'release_date' => $semiMonthly->release_date->toDateString(),
+                'pay_frequency' => $semiMonthly->pay_frequency->value,
             ],
         ]);
     }
@@ -129,6 +148,8 @@ class PayrollController extends Controller
                 'device' => (float) $row->device_deduction,
                 'other' => (float) $row->other_deductions,
                 'net' => (float) $row->net_pay,
+                // Deductions above what the row earns; net pay stops at zero, so this is flagged for review.
+                'shortfall' => PayrollCalculator::shortfall($row),
                 'status' => $row->status->value,
                 'heldAt' => $row->held_at?->toIso8601String(),
                 'holdReason' => $row->hold_reason,
@@ -179,7 +200,6 @@ class PayrollController extends Controller
         $validated = $request->validate([
             'additional_time' => ['required', 'regex:/^\d{1,3}(:[0-5]\d)?$/'],
             'days_absent' => ['required', 'numeric', 'min:0', 'max:31', 'multiple_of:0.5'],
-            'cash_advance_deduction' => ['required', 'numeric', 'min:0', 'max:9999999'],
             'other_deductions' => ['required', 'numeric', 'min:0', 'max:9999999'],
         ], [
             'additional_time.regex' => 'Enter additional hours as hours:minutes, e.g. 18:20.',
@@ -190,7 +210,6 @@ class PayrollController extends Controller
         $manage->adjust($payroll, [
             'additional_minutes' => (int) $hours * 60 + (int) $minutes,
             'days_absent' => $validated['days_absent'],
-            'cash_advance_deduction' => $validated['cash_advance_deduction'],
             'other_deductions' => $validated['other_deductions'],
         ]);
 
@@ -266,6 +285,6 @@ class PayrollController extends Controller
      */
     private function frequencies(): array
     {
-        return array_map(fn (PayFrequency $frequency) => ['value' => $frequency->value, 'label' => $frequency->label()], PayFrequency::cases());
+        return PayFrequency::options();
     }
 }

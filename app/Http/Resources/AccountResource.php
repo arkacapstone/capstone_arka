@@ -41,6 +41,18 @@ class AccountResource extends JsonResource
                 'currentRates',
                 fn () => RateResource::collection($this->currentRates)->resolve($request),
             ),
+            // With no current client, the most recently ended assignments, so the list still shows who they worked for.
+            'endedAssignments' => $this->whenLoaded('rates', function () use ($request) {
+                if ($this->relationLoaded('currentRates') && $this->currentRates->isNotEmpty()) {
+                    return [];
+                }
+
+                $lastEnded = $this->rates->whereNotNull('end_date')->max('end_date');
+
+                return $lastEnded === null ? [] : RateResource::collection(
+                    $this->rates->filter(fn ($rate) => $rate->end_date?->equalTo($lastEnded))->values()
+                )->resolve($request);
+            }),
         ];
     }
 }

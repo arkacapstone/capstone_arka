@@ -1,7 +1,7 @@
 import AppearanceSwitch from '@/Components/Console/AppearanceSwitch';
 import { FlashToast } from '@/Components/Console/Flash';
 import NotificationBell from '@/Components/Console/NotificationBell';
-import { ChevronRightIcon, LogoutIcon, MenuIcon, PanelIcon, SwitchIcon, UserIcon, moduleIcons } from '@/Components/Icons';
+import { ChevronRightIcon, MenuIcon, PanelIcon, SwitchIcon, UserIcon, moduleIcons } from '@/Components/Icons';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -100,6 +100,9 @@ function NavGroup({ item, collapsed, onNavigate }) {
 
 function Sidebar({ collapsed, onNavigate }) {
     const { navigation, viewMode } = usePage().props;
+    // Profile sits at the bottom of the sidebar; signing out is in the account menu (top right).
+    const profile = navigation.find((item) => item.key === 'profile');
+    const modules = navigation.filter((item) => item.key !== 'profile');
 
     return (
         <div className="flex h-full flex-col">
@@ -121,7 +124,7 @@ function Sidebar({ collapsed, onNavigate }) {
             </Link>
 
             <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4 pt-4">
-                {navigation.map((item) =>
+                {modules.map((item) =>
                     item.children?.length ? (
                         <NavGroup key={item.key} item={item} collapsed={collapsed} onNavigate={onNavigate} />
                     ) : (
@@ -130,18 +133,11 @@ function Sidebar({ collapsed, onNavigate }) {
                 )}
             </nav>
 
-            <div className="border-t border-console-line px-2 py-4">
-                <Link
-                    href={route('logout')}
-                    method="post"
-                    as="button"
-                    title="Sign out"
-                    className={`flex w-full items-center gap-3 px-3 py-2 font-condensed text-[16px] font-semibold text-console-heading transition-colors hover:bg-console-raised hover:text-arka-teal ${collapsed ? 'justify-center' : ''}`}
-                >
-                    <LogoutIcon className="h-[18px] w-[18px] shrink-0" />
-                    {!collapsed && 'Sign out'}
-                </Link>
-            </div>
+            {profile && (
+                <div className="border-t border-console-line px-2 py-4">
+                    <NavItem item={profile} collapsed={collapsed} onNavigate={onNavigate} />
+                </div>
+            )}
         </div>
     );
 }

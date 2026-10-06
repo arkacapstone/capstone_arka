@@ -22,6 +22,11 @@ class Device extends Model
 
     public const STATUS_LOST = 'lost';
 
+    /**
+     * Kinds of equipment lent to contractors; anything else is "Other" with its own name.
+     */
+    public const TYPES = ['Laptop', 'Desktop', 'Monitor', 'Keyboard', 'Mouse', 'Headset', 'Webcam', 'Phone', 'Tablet', 'Router / Modem', 'Other'];
+
     protected function casts(): array
     {
         return [

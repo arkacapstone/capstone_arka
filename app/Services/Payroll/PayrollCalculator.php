@@ -4,7 +4,6 @@ namespace App\Services\Payroll;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\EmploymentType;
-use App\Enums\PayFrequency;
 use App\Enums\PayrollStatus;
 use App\Models\Attendance;
 use App\Models\CashAdvance;
@@ -68,6 +67,29 @@ class PayrollCalculator
     }
 
     /**
+     * A contractor's gross pay for the period across all their clients (the latest rate per client).
+     */
+    public static function grossFor(PayrollPeriod $period, User $employee): float
+    {
+        return round((float) self::ratesFor($period)
+            ->where('employee_id', $employee->id)
+            ->orderBy('effective_date')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('client_id')
+            ->sum(fn ($rates) => (float) $rates->last()->gross_pay), 2);
+    }
+
+    /**
+     * Re-applies device, reward and cash advance amounts to an already calculated payroll, e.g. after
+     * a cash advance is approved while attendance is locked.
+     */
+    public function refreshEmployeeDeductions(PayrollPeriod $period): void
+    {
+        DB::transaction(fn () => $this->applyEmployeeDeductions($period));
+    }
+
+    /**
      * Everyone who is paid in this period (and therefore notified about it).
      *
      * @return Collection<int, User>
@@ -79,9 +101,13 @@ class PayrollCalculator
 
     public function calculate(PayrollPeriod $period): int
     {
-        $rates = self::ratesFor($period)->with('employee')->get();
+        // One row per contractor and client. If the rate changed during the period, the latest rate is paid,
+        // and attendance is counted over the whole time any of that client's rates applied in the period.
+        $groups = self::ratesFor($period)->with('employee')->orderBy('effective_date')->orderBy('id')->get()
+            ->groupBy(fn (Rate $rate) => "{$rate->employee_id}-{$rate->client_id}");
+        $rates = $groups->map(fn ($group) => $group->last())->values();
 
-        DB::transaction(function () use ($period, $rates) {
+        DB::transaction(function () use ($period, $rates, $groups) {
             // Rates that no longer apply drop out of the draft.
             $this->clear($period, $period->payrolls()->whereNotIn('rate_id', $rates->pluck('id'))->pluck('id')->all());
 
@@ -89,7 +115,14 @@ class PayrollCalculator
                 $row = Payroll::query()->firstOrNew(['period_id' => $period->id, 'rate_id' => $rate->id]);
                 $row->fill(['employee_id' => $rate->employee_id, 'client_id' => $rate->client_id]);
 
-                $this->applyAttendance($row, $rate, $period);
+                $group = $groups->get("{$rate->employee_id}-{$rate->client_id}");
+                $this->applyAttendance(
+                    $row,
+                    $rate,
+                    $period,
+                    $group->min('effective_date')->max($period->start_date),
+                    $group->contains(fn (Rate $each) => $each->end_date === null) ? $period->end_date : $group->max('end_date')->min($period->end_date),
+                );
                 if ($row->status !== PayrollStatus::Reviewed) {
                     $row->status = PayrollStatus::Draft;
                 }
@@ -142,7 +175,24 @@ class PayrollCalculator
         $row->absence_deduction = $this->rules->enabled('absence_deductions_enabled') ? round($rate->dailyRate() * (float) $row->days_absent, 2) : 0;
         $row->late_deduction = $this->rules->enabled('late_deductions_enabled') ? round($hourly * $row->late_minutes / 60, 2) : 0;
 
-        $row->net_pay = round(
+        // Net pay never goes below zero; the Super Admin sees the shortfall on the row (see shortfall()).
+        $row->net_pay = max(0, self::unclampedNet($row));
+
+        return $row;
+    }
+
+    /**
+     * How much the deductions exceed what the row earns, if they do. Net pay stops at zero, so this
+     * is shown on the row for the Super Admin to review.
+     */
+    public static function shortfall(Payroll $row): float
+    {
+        return round(max(0, -self::unclampedNet($row)), 2);
+    }
+
+    private static function unclampedNet(Payroll $row): float
+    {
+        return round(
             (float) $row->gross_pay
             + (float) $row->additional_pay
             + (float) ($row->overtime_amount ?? 0)
@@ -154,8 +204,6 @@ class PayrollCalculator
             - (float) ($row->other_deductions ?? 0),
             2,
         );
-
-        return $row;
     }
 
     /**
@@ -180,10 +228,8 @@ class PayrollCalculator
         }
     }
 
-    private function applyAttendance(Payroll $row, Rate $rate, PayrollPeriod $period): void
+    private function applyAttendance(Payroll $row, Rate $rate, PayrollPeriod $period, CarbonInterface $from, CarbonInterface $to): void
     {
-        $from = $rate->effective_date->max($period->start_date);
-        $to = $rate->end_date ? $rate->end_date->min($period->end_date) : $period->end_date;
 
         $records = Attendance::query()
             ->where('employee_id', $rate->employee_id)
@@ -191,15 +237,6 @@ class PayrollCalculator
             ->whereDate('date', '>=', $from)
             ->whereDate('date', '<=', $to)
             ->get();
-
-        if ($rate->pay_frequency === PayFrequency::Hourly) {
-            // Hourly arrangements are paid for the hours actually worked.
-            $row->gross_pay = round((float) $rate->gross_pay * (float) $records->sum('actual_hours'), 2);
-            $row->days_absent = 0;
-            $row->late_minutes = 0;
-
-            return;
-        }
 
         $row->gross_pay = $rate->gross_pay;
         $row->late_minutes = (int) $records->sum(fn (Attendance $record) => $record->late_minutes + $record->undertime_minutes);
@@ -282,20 +319,21 @@ class PayrollCalculator
             }
         }
 
-        return $missed;
+        // Never more absences than the working days the rate pays for (e.g. a schedule with more days than the rate).
+        return min($missed, (int) $rate->working_days);
     }
 
     /**
-     * Per-employee deductions go on the contractor's first row: approved device loss/damage
-     * deductions not yet charged (each at the lost device's value), and every outstanding cash advance
-     * in full (given before payday, deducted all at once). A reviewed row keeps its manual amount.
+     * Per-employee deductions go on the contractor's main row (highest gross pay): approved device
+     * loss/damage deductions not yet charged (each at the lost device's value), and the cash advance
+     * taken for this payday in full, plus anything still owed from an earlier payday. Always automatic.
      */
     private function applyEmployeeDeductions(PayrollPeriod $period): void
     {
         $rows = $period->payrolls()->with('rate')->orderBy('id')->get()->groupBy('employee_id');
 
         foreach ($rows as $employeeId => $employeeRows) {
-            $first = $employeeRows->first();
+            $first = $employeeRows->sortByDesc(fn (Payroll $row) => (float) $row->gross_pay)->first();
 
             DeviceDeduction::query()
                 ->whereNotNull('approved_at')
@@ -311,16 +349,19 @@ class PayrollCalculator
                 ->where(fn (Builder $query) => $query->whereNull('payroll_id')->orWhereIn('payroll_id', $employeeRows->pluck('id')))
                 ->update(['payroll_id' => $first->id]);
 
-            $outstanding = (float) CashAdvance::query()->outstanding()->where('employee_id', $employeeId)->sum('remaining_balance');
+            // Advances for a later payday wait for that payroll.
+            $outstanding = (float) CashAdvance::query()
+                ->outstanding()
+                ->where('employee_id', $employeeId)
+                ->where(fn (Builder $query) => $query->whereNull('payday')->orWhereDate('payday', '<=', $period->release_date))
+                ->sum('remaining_balance');
 
             foreach ($employeeRows as $row) {
                 // Each lost device is deducted at its own value, never capped to a fixed amount.
                 $row->device_deduction = round((float) DeviceDeduction::query()->where('payroll_id', $row->id)->sum('amount'), 2);
                 $row->reward_amount = round((float) Reward::query()->where('payroll_id', $row->id)->sum('amount'), 2);
 
-                if ($row->status !== PayrollStatus::Reviewed) {
-                    $row->cash_advance_deduction = $row->is($first) ? round($outstanding, 2) : 0;
-                }
+                $row->cash_advance_deduction = $row->is($first) ? round($outstanding, 2) : 0;
 
                 $this->total($row, $row->rate)->save();
             }

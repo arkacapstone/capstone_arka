@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Client;
 use App\Models\Schedule;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -37,7 +38,8 @@ class ScheduleResource extends JsonResource
             'endTime' => substr($this->end_time, 0, 5),
             'crossesMidnight' => $this->crossesMidnight(),
             'expectedHours' => $this->expectedHours(),
-            'breakAllowance' => $this->break_allowance_minutes,
+            // Set per client (Workforce → Clients).
+            'breakAllowance' => $this->client?->break_allowance_minutes ?? Client::DEFAULT_BREAK_ALLOWANCE,
             'startDate' => $this->start_date->toDateString(),
             'endDate' => $this->end_date?->toDateString(),
             // Ended = replaced or finished; kept as history, never deleted.

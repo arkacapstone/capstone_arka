@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'action', 'module', 'reference_table', 'reference_id', 'details', 'ip_address'])]
+#[Fillable(['user_id', 'action', 'module', 'reference_table', 'reference_id', 'details'])]
 class ActivityLog extends Model
 {
     use HasFactory;

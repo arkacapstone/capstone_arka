@@ -28,7 +28,7 @@ class PendingApprovalsWidget implements DashboardWidget
     {
         $items = [
             $this->item('leave', 'Leave requests', LeaveRequest::query()->pending()->count(), 'super-admin.requests'),
-            $this->item('cash_advances', 'Cash advances', CashAdvance::query()->pending()->count(), 'super-admin.cash-advances'),
+            $this->item('cash_advances', 'Cash advances', CashAdvance::query()->pending()->count(), 'super-admin.requests', ['type' => 'cash-advances']),
             $this->item('payroll', 'Payroll awaiting approval', Payroll::query()->where('status', PayrollStatus::Reviewed)->count(), 'super-admin.payroll'),
             $this->item('device_deductions', 'Device deductions', DeviceDeduction::query()->pending()->count(), 'super-admin.requests'),
             $this->item('client_assignments', 'Client assignments', ClientAssignmentRequest::query()->pending()->count(), 'super-admin.requests', ['type' => 'clients']),

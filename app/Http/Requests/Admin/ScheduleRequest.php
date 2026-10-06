@@ -38,7 +38,6 @@ class ScheduleRequest extends FormRequest
             'working_days.*' => ['distinct', Rule::enum(Weekday::class)],
             'start_time' => ['required', 'date_format:H:i'],
             'end_time' => ['required', 'date_format:H:i', 'different:start_time'],
-            'break_allowance_minutes' => ['required', 'integer', 'min:0', 'max:240'],
             // Schedules start today at the earliest; past dates cannot be picked.
             'start_date' => $changing ? ['prohibited'] : ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['nullable', 'date', $changing ? 'after_or_equal:effective_date' : 'after_or_equal:start_date'],
@@ -69,7 +68,6 @@ class ScheduleRequest extends FormRequest
             'working_days' => 'working days',
             'start_time' => 'start time',
             'end_time' => 'end time',
-            'break_allowance_minutes' => 'break allowance',
             'effective_date' => 'effective date',
         ];
     }

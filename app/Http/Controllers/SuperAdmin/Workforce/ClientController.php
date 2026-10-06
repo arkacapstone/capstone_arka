@@ -11,8 +11,9 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Workforce Management → Clients (Blueprint §5), view-only. Admins add clients when they give them
- * to contractors; the Super Admin approves each assignment in Requests & Approvals.
+ * Workforce Management → Clients (Blueprint §5), view-only. Admins add clients, with their break
+ * allowance, when they give them to contractors; the Super Admin approves each assignment in
+ * Requests & Approvals.
  */
 class ClientController extends Controller
 {
@@ -39,6 +40,7 @@ class ClientController extends Controller
                 'code' => $client->client_code,
                 'status' => $client->is_active ? 'active' : 'inactive',
                 'assignedCount' => $client->assigned_count,
+                'breakAllowance' => $client->break_allowance_minutes,
                 'createdAt' => $client->created_at?->toDateString(),
             ]);
 

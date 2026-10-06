@@ -15,7 +15,6 @@ function AdjustForm({ row, onDone }) {
     const { data, setData, patch, processing, errors } = useForm({
         additional_time: row.additionalTime,
         days_absent: row.daysAbsent,
-        cash_advance_deduction: row.cashAdvance,
         other_deductions: row.other,
     });
 
@@ -48,6 +47,7 @@ function AdjustForm({ row, onDone }) {
                 <MetricRow label="Overtime pay (approved tickets)" value={`+ ${peso(row.overtime)}`} />
                 {row.reward > 0 && <MetricRow label="Rewards (additional pay)" value={`+ ${peso(row.reward)}`} />}
                 <MetricRow label="Device" value={`− ${peso(row.device)}`} />
+                <MetricRow label="Cash advance (automatic)" value={`− ${peso(row.cashAdvance)}`} />
             </div>
             <p className="text-xs text-console-muted">
                 Lates, absences and additional hours come from the locked attendance (additional hours = hours worked beyond working days × hours per day); overtime from approved tickets at the hourly rate. Change them here only to correct a mistake, e.g. half days.
@@ -62,7 +62,6 @@ function AdjustForm({ row, onDone }) {
                 inputMode="numeric"
             />
             <Field id="days_absent" label="Days absent (0.5 = half day)" {...number('days_absent')} step="0.5" />
-            <Field id="cash_advance_deduction" label="Cash advance repayment (₱)" {...number('cash_advance_deduction')} />
             <Field id="other_deductions" label="Other approved deductions (₱)" {...number('other_deductions')} />
             <ConsoleButton type="submit" disabled={processing}>
                 Save adjustments
@@ -161,7 +160,7 @@ export default function Show({ overview, rows, canAdjust, canHold, canDelete, em
                             {rows.length === 0
                                 ? `Payroll is calculated when attendance is locked (rates × attendance, late/undertime and absences). ${employeesPaid} ${employeesPaid === 1 ? 'person has' : 'people have'} a ${period.frequency.toLowerCase()} rate in this period.`
                                 : canAdjust
-                                  ? 'Review each row. Adjust additional hours, half-day absences, cash advance and other deductions before approving. Overtime comes from approved tickets.'
+                                  ? 'Review each row. Adjust additional hours, half-day absences and other deductions before approving. Overtime comes from approved tickets; cash advances are deducted automatically.'
                                   : 'Payroll rows are approved and can no longer be adjusted.'}
                         </p>
                     </div>
@@ -203,7 +202,14 @@ export default function Show({ overview, rows, canAdjust, canHold, canDelete, em
                                 <Cell className="font-mono">{peso(row.cashAdvance)}</Cell>
                                 <Cell className="font-mono">{peso(row.device)}</Cell>
                                 <Cell className="font-mono">{peso(row.other)}</Cell>
-                                <Cell className="font-mono font-medium text-console-heading">{peso(row.net)}</Cell>
+                                <Cell className="font-mono font-medium text-console-heading">
+                                    {peso(row.net)}
+                                    {row.shortfall > 0 && (
+                                        <p className="mt-1 whitespace-nowrap font-sans text-[11px] font-normal text-console-error" title="Net pay stops at zero. Review absences, lates and deductions in Adjust.">
+                                            Deductions exceed gross pay by {peso(row.shortfall)}
+                                        </p>
+                                    )}
+                                </Cell>
                                 <Cell>
                                     {row.heldAt ? (
                                         <span title={row.holdReason}>

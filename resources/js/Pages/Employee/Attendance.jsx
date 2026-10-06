@@ -75,7 +75,7 @@ function VerificationPanel({ verification }) {
     const [fixing, setFixing] = useState(null);
     const [confirming, setConfirming] = useState(false);
     const [processing, setProcessing] = useState(false);
-    const { periodId, name, cutoffDate, verifiedAt, canFix: windowOpen, closed, fixDeadline, fixes, records } = verification;
+    const { periodId, name, cutoffDate, verifiedAt, canFix: windowOpen, closed, autoSubmitted, fixDeadline, fixes, records } = verification;
     const canFix = !verifiedAt && windowOpen;
     const [expanded, setExpanded] = useState([]);
     const toggle = (id) => setExpanded((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]));
@@ -102,7 +102,9 @@ function VerificationPanel({ verification }) {
                 title="Verify your attendance"
                 subtitle={`Payroll ${name} · submit before the ${fullDate(cutoffDate)} cutoff`}
                 action={
-                    verifiedAt ? (
+                    autoSubmitted ? (
+                        <Tag tone="waiting">Auto-submitted · as recorded</Tag>
+                    ) : verifiedAt ? (
                         <StatusBadge status="approved" label="Verified" />
                     ) : closed ? (
                         <Tag tone="closed">Submitted by the Admin</Tag>
@@ -113,7 +115,9 @@ function VerificationPanel({ verification }) {
             />
 
             <p className="mt-4 text-sm text-console-muted">
-                {verifiedAt
+                {autoSubmitted
+                    ? 'You did not submit your attendance, so it was submitted as recorded when the Admin submitted the period. Payroll uses it as is.'
+                    : verifiedAt
                     ? `You submitted your attendance as verified on ${fullDate(verifiedAt.slice(0, 10))}.`
                     : canFix
                       ? `Check your time in and time out for each day. You can fix as many days as you need until ${dateTime(fixDeadline)}; each fix is saved right away. When everything is correct, submit your attendance as verified.`

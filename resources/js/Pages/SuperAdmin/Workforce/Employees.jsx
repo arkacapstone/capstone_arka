@@ -1,5 +1,4 @@
 import Dialog from '@/Components/Console/Dialog';
-import { ConsoleButton } from '@/Components/Console/Field';
 import { IssuedInvitation } from '@/Components/Console/Flash';
 import Pagination from '@/Components/Console/Pagination';
 import Panel, { PanelHeading } from '@/Components/Console/Panel';
@@ -11,14 +10,27 @@ import Table, { Cell, Row } from '@/Components/Workforce/Table';
 import useFilters, { SearchInput } from '@/Components/Workforce/useFilters';
 import WorkforceTabs from '@/Components/Workforce/WorkforceTabs';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
-import { peso } from '@/lib/format';
+import { fullDate, peso } from '@/lib/format';
 import { Link } from '@inertiajs/react';
 import { useState } from 'react';
 
 const filterSelect =
     'rounded-none border border-console-line bg-console-panel py-2 pl-3 pr-9 text-[13px] text-console-text transition-colors hover:border-arka-teal focus:border-arka-teal focus:ring-0';
 
-function Assignments({ assignments }) {
+function Assignments({ assignments, ended = [] }) {
+    if (!assignments?.length && ended.length) {
+        // No current client: show who they last worked for, marked as ended.
+        return (
+            <ul className="flex flex-col gap-1">
+                {ended.map((rate) => (
+                    <li key={rate.id} className="text-xs text-console-dim">
+                        <span className="text-console-muted">{rate.client.name}</span> · {peso(rate.grossPay)} · ended {fullDate(rate.endDate)}
+                    </li>
+                ))}
+            </ul>
+        );
+    }
+
     if (!assignments?.length) {
         return <span className="text-[11px] text-console-heading">No client assigned</span>;
     }
@@ -30,7 +42,7 @@ function Assignments({ assignments }) {
                     <span className="text-console-text">{rate.client.name}</span>
                     <span className="text-console-dim">
                         {' '}
-                        · {peso(rate.grossPay)} {rate.payFrequency === 'hourly' ? '/hr' : `· ${rate.payFrequencyLabel}`}
+                        · {peso(rate.grossPay)} · {rate.payFrequencyLabel}
                     </span>
                 </li>
             ))}
@@ -62,8 +74,7 @@ export default function Employees({ employees, filters, counts, clients, employm
                 <Panel>
                     <PanelHeading
                         title="Contractors"
-                        subtitle="Accounts, Full-Time / Part-Time classification, and the clients each person serves."
-                        action={<ConsoleButton onClick={() => setFormAccount({})}>+ New contractor</ConsoleButton>}
+                        subtitle="Accounts, Full-Time / Part-Time classification, and the clients each person serves. Admins add new contractors in Contractor Management."
                     />
 
                     <div className="mb-5 mt-6 flex flex-wrap gap-3">
@@ -104,7 +115,7 @@ export default function Employees({ employees, filters, counts, clients, employm
                                 <Cell className="text-console-muted">{account.employeeCode}</Cell>
                                 <Cell className="text-console-muted">{account.employmentTypeLabel ?? <span className="text-console-heading">Not set</span>}</Cell>
                                 <Cell>
-                                    <Assignments assignments={account.assignments} />
+                                    <Assignments assignments={account.assignments} ended={account.endedAssignments} />
                                 </Cell>
                                 <Cell>
                                     <StatusBadge status={account.invited ? 'invited' : account.status} />
@@ -133,16 +144,15 @@ export default function Employees({ employees, filters, counts, clients, employm
                 open={formAccount !== null}
                 onClose={() => setFormAccount(null)}
                 side
-                title={formAccount?.id ? 'Edit contractor' : 'New contractor'}
-                description={formAccount?.id ? formAccount.employeeCode : 'You will assign clients and rates next'}
+                title="Edit contractor"
+                description={formAccount?.employeeCode}
             >
+                {/* Editing only: Admins add new contractors. */}
                 {formAccount !== null && (
                     <AccountForm
-                        key={formAccount.id ?? 'new'}
-                        account={formAccount.id ? formAccount : null}
-                        storeUrl={route('super-admin.workforce.employees.store')}
-                        updateUrl={formAccount.id ? route('super-admin.workforce.employees.update', formAccount.id) : null}
-                        submitLabel="Send invite"
+                        key={formAccount.id}
+                        account={formAccount}
+                        updateUrl={route('super-admin.workforce.employees.update', formAccount.id)}
                         onDone={() => setFormAccount(null)}
                     />
                 )}

@@ -5,10 +5,12 @@ namespace Tests\Feature\Admin;
 use App\Enums\PayFrequency;
 use App\Enums\PayrollPeriodStatus;
 use App\Models\Attendance;
+use App\Models\AttendanceVerification;
 use App\Models\Client;
 use App\Models\PayrollPeriod;
 use App\Models\Rate;
 use App\Models\User;
+use App\Notifications\AttendanceAutoSubmitted;
 use App\Notifications\VerificationReminder;
 use App\Notifications\VerifiedPeriodSubmitted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -78,7 +80,7 @@ class PeriodVerificationTest extends TestCase
                 ->where('verification.contractors.0.fixes.0.after', '9:00 AM – 6:00 PM')
                 ->where('verification.contractors.1.id', $this->waiting->id)
                 ->where('verification.period.canRemind', true)
-                ->where('verification.period.canSubmit', false));
+                ->where('verification.period.canSubmit', true));
 
         // The dashboard links to the module with a summary.
         $this->get(route('admin.dashboard'))
@@ -124,7 +126,7 @@ class PeriodVerificationTest extends TestCase
         Notification::assertSentTo($this->admin, VerificationReminder::class);
     }
 
-    public function test_the_admin_submits_last_and_only_then_can_the_super_admin_process_payroll(): void
+    public function test_the_admin_can_submit_before_everyone_has_and_only_then_can_the_super_admin_process_payroll(): void
     {
         Notification::fake();
 
@@ -133,19 +135,35 @@ class PeriodVerificationTest extends TestCase
             ->post(route('super-admin.payroll.advance', $this->period))
             ->assertSessionHasErrors('status');
 
-        // Someone has not submitted and can still fix today, so the Admin cannot submit yet.
+        // Someone has not submitted and could still fix today: the Admin is warned but may submit anyway.
         $this->actingAs($this->admin)
-            ->post(route('admin.verification.submit', $this->period))
-            ->assertSessionHasErrors('period');
+            ->get(route('admin.verification.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('verification.period.canSubmit', true)
+                ->where('verification.period.submitWarning', '1 contractor has not submitted yet. If you submit now, they are submitted automatically with their attendance as recorded.'));
 
-        // After midnight fixing has closed; the Admin submits the verified period.
-        $this->travelTo('2026-09-27 08:00:00');
-        $this->actingAs($this->admin)
-            ->post(route('admin.verification.submit', $this->period))
-            ->assertSessionHasNoErrors();
+        $this->post(route('admin.verification.submit', $this->period))->assertSessionHasNoErrors();
+
+        // Submitting twice is refused.
+        $this->post(route('admin.verification.submit', $this->period))->assertSessionHasErrors('period');
 
         $this->assertSame($this->admin->id, $this->period->refresh()->admin_submitted_by);
         Notification::assertSentTo($this->superAdmin, VerifiedPeriodSubmitted::class);
+
+        // Whoever never submitted is submitted for them, as recorded, and told so.
+        $this->assertTrue(AttendanceVerification::query()->where('employee_id', $this->waiting->id)->sole()->auto_submitted);
+        $this->assertFalse(AttendanceVerification::query()->where('employee_id', $this->submitted->id)->sole()->auto_submitted);
+        Notification::assertSentTo($this->waiting, AttendanceAutoSubmitted::class);
+        Notification::assertNotSentTo($this->submitted, AttendanceAutoSubmitted::class);
+
+        // The Super Admin sees everyone as submitted, the auto-submitted one marked.
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.payroll', ['tab' => 'verification']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('verification.contractors', 2)
+                ->where('verification.counts.autoSubmitted', 1)
+                ->where('verification.contractors.1.id', $this->waiting->id)
+                ->where('verification.contractors.1.autoSubmitted', true));
 
         // Contractors can no longer submit, and the reminder is gone.
         $this->actingAs($this->waiting)

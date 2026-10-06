@@ -177,7 +177,7 @@ export default function TimeTracker({ board }) {
                         )}
                     </div>
                     <p className="mt-4 text-xs text-console-muted">
-                        Break allowance is set by your administrator and shown here for your own awareness only — going over never reduces your pay.
+                        Break allowance is set for each client and shown here for your own awareness only — going over never reduces your pay.
                     </p>
                 </Panel>
             </div>

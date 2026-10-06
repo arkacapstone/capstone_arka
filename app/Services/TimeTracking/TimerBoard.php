@@ -28,9 +28,6 @@ class TimerBoard
     /** @var array<string, bool> */
     private array $lockedDays = [];
 
-    /** @var array<string, int> employee-client-date → break allowance minutes */
-    private array $breakAllowances = [];
-
     public function __construct(
         private readonly AssignedClients $assigned,
         private readonly AttendanceLock $lock,
@@ -118,8 +115,8 @@ class TimerBoard
             'position' => $row['position'],
             // Full-Time or Part-Time for this client; older assignments fall back to the contractor's type.
             'employmentType' => $rate?->employment_type?->label() ?? $employee->employment_type?->label(),
-            // Set by the Admin on the schedule; informational only.
-            'breakAllowance' => $schedule?->break_allowance_minutes ?? Schedule::DEFAULT_BREAK_ALLOWANCE,
+            // Set per client (Workforce → Clients); informational only.
+            'breakAllowance' => $client->break_allowance_minutes ?? Client::DEFAULT_BREAK_ALLOWANCE,
             'locked' => $this->isLocked($row['date']),
             'scheduled' => $scheduled,
             'status' => match (true) {
@@ -161,30 +158,12 @@ class TimerBoard
             'start' => $log->time_in->format('g:i A'),
             'end' => $log->time_out?->format('g:i A'),
             'breakUsed' => $log->breakMinutesAt($log->time_out ?? $now),
-            'breakAllowance' => $this->breakAllowance($employee, $log->client_id, $log->date),
+            'breakAllowance' => $log->client?->break_allowance_minutes ?? Client::DEFAULT_BREAK_ALLOWANCE,
             'workedSeconds' => $log->workedSecondsAt($now),
             'status' => $log->status->value,
             'statusLabel' => $log->status->label(),
             'paidOut' => $this->paidOut($log),
         ];
-    }
-
-    /**
-     * The break allowance on the schedule in effect that day for this client, or the default.
-     */
-    private function breakAllowance(User $employee, ?int $clientId, CarbonInterface $date): int
-    {
-        if ($clientId === null) {
-            return Schedule::DEFAULT_BREAK_ALLOWANCE;
-        }
-
-        return $this->breakAllowances["{$employee->id}-{$clientId}-{$date->toDateString()}"] ??= (int) (Schedule::query()
-            ->where('employee_id', $employee->id)
-            ->where('client_id', $clientId)
-            ->whereDate('start_date', '<=', $date)
-            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $date))
-            ->orderByDesc('start_date')
-            ->value('break_allowance_minutes') ?? Schedule::DEFAULT_BREAK_ALLOWANCE);
     }
 
     private function paidOut(TimeLog $log): bool

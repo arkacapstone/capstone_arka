@@ -9,14 +9,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['client_name', 'client_code', 'is_active'])]
+#[Fillable(['client_name', 'client_code', 'break_allowance_minutes', 'is_active'])]
 class Client extends Model
 {
     use HasFactory;
 
+    /**
+     * Break minutes per session for a new client. Informational only: going over never reduces pay.
+     */
+    public const DEFAULT_BREAK_ALLOWANCE = 60;
+
     protected function casts(): array
     {
         return [
+            'break_allowance_minutes' => 'integer',
             'is_active' => 'boolean',
         ];
     }

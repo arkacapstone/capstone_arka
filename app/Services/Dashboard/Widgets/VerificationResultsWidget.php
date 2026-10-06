@@ -46,14 +46,18 @@ class VerificationResultsWidget implements DashboardWidget
             ->keyBy('employee_id');
 
         $everyone = PayrollCalculator::employeesFor($period)
-            ->map(function (User $contractor) use ($verifications) {
+            ->map(function (User $contractor) use ($verifications, $period) {
                 $verification = $verifications->get($contractor->id);
+                // Once the Admin submits, anyone who never submitted counts as submitted with their attendance as recorded
+                // (also for periods submitted before this was stored).
+                $autoSubmitted = (bool) $verification?->auto_submitted || ($period->isSubmittedByAdmin() && $verification?->verified_at === null);
 
                 return [
                     'id' => $contractor->id,
                     'name' => $contractor->name,
                     'code' => $contractor->employee_code,
-                    'verifiedAt' => $verification?->verified_at?->toIso8601String(),
+                    'verifiedAt' => ($verification?->verified_at ?? ($autoSubmitted ? $period->admin_submitted_at : null))?->toIso8601String(),
+                    'autoSubmitted' => $autoSubmitted,
                     ...($this->withChanges
                         ? ['fixes' => $verification?->corrections->map(fn (AttendanceCorrection $correction) => FixHistory::present($correction))->all() ?? []]
                         : []),
@@ -84,12 +88,14 @@ class VerificationResultsWidget implements DashboardWidget
                     'canRemind' => $inVerification && $waiting > 0,
                     'canSubmit' => $blocker === null,
                     'submitBlocker' => $inVerification ? $blocker : null,
+                    'submitWarning' => ReviewPeriodVerification::submitWarning($period),
                 ] : []),
             ],
             'counts' => [
                 'total' => $everyone->count(),
                 'verified' => $everyone->count() - $waiting,
                 'waiting' => $waiting,
+                'autoSubmitted' => $everyone->where('autoSubmitted', true)->count(),
                 ...($this->withChanges ? [
                     'fixed' => $everyone->filter(fn (array $row) => $row['fixes'] !== [])->count(),
                     'fixes' => $everyone->sum(fn (array $row) => count($row['fixes'])),

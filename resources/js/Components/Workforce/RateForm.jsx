@@ -12,16 +12,14 @@ function today() {
  * Hourly Rate = Gross Pay ÷ (Working Days × Hours per Day); Daily Rate = Gross Pay ÷ Working Days (Blueprint §11).
  * For hourly arrangements the gross pay is already the hourly rate.
  */
-function derivedRates({ gross_pay, pay_frequency, working_days, hours_per_day }) {
+function derivedRates({ gross_pay, working_days, hours_per_day }) {
     const gross = Number(gross_pay);
     const days = Number(working_days);
     const hours = Number(hours_per_day);
 
     if (!gross || !days || !hours) return null;
 
-    return pay_frequency === 'hourly'
-        ? { hourly: gross, daily: gross * hours }
-        : { hourly: gross / (days * hours), daily: gross / days };
+    return { hourly: gross / (days * hours), daily: gross / days };
 }
 
 /**
@@ -33,18 +31,17 @@ export default function RateForm({ employeeId, rate, assignment, defaults = {}, 
     const { data, setData, post, put, processing, errors } = useForm({
         gross_pay: rate?.grossPay ?? '',
         pay_frequency: rate?.payFrequency ?? 'semi_monthly',
-        working_days: rate?.workingDays ?? defaults.workingDays ?? 11,
-        // A Part-Time or Full-Time client starts from that type's hours (System & Rules).
-        hours_per_day:
-            rate?.hoursPerDay ??
-            { full_time: defaults.fullTimeHours, part_time: defaults.partTimeHours }[assignment?.employmentType] ??
-            defaults.hoursPerDay ??
-            8,
         effective_date: assignment?.startDate ?? today(),
     });
 
-    const preview = derivedRates(data);
-    const hourly = data.pay_frequency === 'hourly';
+    // Working days and hours are set only in System & Rules (hours follow the client's Full-Time /
+    // Part-Time type); the server applies them. Here they only drive the hourly / daily preview.
+    const type = assignment?.employmentType ?? rate?.employmentType;
+    const preview = derivedRates({
+        gross_pay: data.gross_pay,
+        working_days: defaults.workingDays ?? 11,
+        hours_per_day: { full_time: defaults.fullTimeHours, part_time: defaults.partTimeHours }[type] ?? defaults.hoursPerDay ?? 8,
+    });
 
     const submit = (e) => {
         e.preventDefault();
@@ -88,57 +85,13 @@ export default function RateForm({ employeeId, rate, assignment, defaults = {}, 
                 type="number"
                 min="1"
                 step="0.01"
-                label={hourly ? 'Hourly rate (₱)' : 'Gross pay per period (₱)'}
+                label="Gross pay per period (₱)"
                 value={data.gross_pay}
                 onChange={(e) => setData('gross_pay', e.target.value)}
                 error={errors.gross_pay}
-                placeholder={hourly ? '125.00' : '20000.00'}
+                placeholder="20000.00"
                 required
             />
-
-            {!changing && (
-                <div>
-                    <Field
-                        id="hours_per_day"
-                        type="number"
-                        label={`Hours / day${assignment.employmentTypeLabel ? ` · ${assignment.employmentTypeLabel}` : ''}`}
-                        value={data.hours_per_day}
-                        readOnly
-                        disabled
-                        className="opacity-80"
-                    />
-                    <p className="mt-1.5 text-xs text-console-muted">
-                        Set in System &amp; Rules. Working days per period: {data.working_days} (System &amp; Rules).
-                    </p>
-                </div>
-            )}
-
-            {changing && (
-                <div className="grid grid-cols-2 gap-4">
-                    <Field
-                        id="working_days"
-                        type="number"
-                        min="1"
-                        max="31"
-                        label="Working days / period"
-                        value={data.working_days}
-                        onChange={(e) => setData('working_days', e.target.value)}
-                        error={errors.working_days}
-                        required
-                    />
-                    <Field
-                        id="hours_per_day"
-                        type="number"
-                        min="1"
-                        max="24"
-                        label="Hours / day"
-                        value={data.hours_per_day}
-                        onChange={(e) => setData('hours_per_day', e.target.value)}
-                        error={errors.hours_per_day}
-                        required
-                    />
-                </div>
-            )}
 
             <Field
                 id="effective_date"
@@ -162,9 +115,8 @@ export default function RateForm({ employeeId, rate, assignment, defaults = {}, 
                 </div>
             </dl>
             <p className="-mt-2 text-[11px] leading-relaxed text-console-dim">
-                {hourly
-                    ? 'Daily rate = hourly rate × hours per day.'
-                    : 'Hourly = gross ÷ (working days × hours per day). Daily = gross ÷ working days. Used for additional pay, absences and lates.'}
+                Hourly = gross ÷ (working days × hours per day). Daily = gross ÷ working days. Working days and hours per day are set in System &amp; Rules.
+                Used for additional pay, absences and lates.
             </p>
 
             <div className="flex items-center gap-3">

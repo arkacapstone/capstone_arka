@@ -21,11 +21,6 @@ class TimeLog extends Model
 {
     use HasFactory;
 
-    /**
-     * Break allowance when the administrator has not set one for the employee.
-     */
-    public const DEFAULT_BREAK_ALLOWANCE = 60;
-
     protected function casts(): array
     {
         return [

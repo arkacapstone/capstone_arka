@@ -4,6 +4,8 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Enums\CashAdvanceStatus;
 use App\Models\CashAdvance;
+use App\Models\PayrollPeriod;
+use App\Models\Rate;
 use App\Models\User;
 use App\Notifications\CashAdvanceDecided;
 use App\Notifications\CashAdvanceRequested;
@@ -26,10 +28,23 @@ class CashAdvanceTest extends TestCase
         $this->superAdmin = User::factory()->superAdmin()->create();
     }
 
+    /**
+     * A contractor in the Sep 26 – Oct 10 pay period (not created yet), with ₱20,000 gross pay for it.
+     */
+    private function contractorBeforePayday(): User
+    {
+        $this->travelTo('2026-09-26 10:00:00');
+        PayrollPeriod::factory()->create();
+        $employee = User::factory()->create();
+        Rate::factory()->for($employee, 'employee')->create(['effective_date' => '2026-01-01']);
+
+        return $employee;
+    }
+
     public function test_an_employee_requests_a_cash_advance_and_the_super_admin_is_notified(): void
     {
         Notification::fake();
-        $employee = User::factory()->create();
+        $employee = $this->contractorBeforePayday();
 
         $this->actingAs($employee)
             ->post(route('employee.cash-advances.store'), ['amount' => 2500, 'reason' => 'Laptop repair'])
@@ -47,10 +62,11 @@ class CashAdvanceTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->missing('cashAdvances'));
     }
 
-    public function test_requests_above_the_maximum_are_refused(): void
+    public function test_requests_above_the_gross_pay_are_refused(): void
     {
-        $this->actingAs(User::factory()->create())
-            ->post(route('employee.cash-advances.store'), ['amount' => 50000, 'reason' => 'Too much'])
+        // Up to the ₱20,000 gross pay for the period.
+        $this->actingAs($this->contractorBeforePayday())
+            ->post(route('employee.cash-advances.store'), ['amount' => 20000.01, 'reason' => 'Too much'])
             ->assertSessionHasErrors('amount');
 
         $this->assertDatabaseCount('cash_advances', 0);
@@ -71,13 +87,19 @@ class CashAdvanceTest extends TestCase
         Notification::fake();
         $advance = CashAdvance::factory()->create(['amount' => 4000, 'remaining_balance' => 4000]);
 
+        // Cash advances are a tab of Requests & Approvals; the old address leads there.
         $this->actingAs($this->superAdmin)
             ->get(route('super-admin.cash-advances'))
+            ->assertRedirect(route('super-admin.requests', ['type' => 'cash-advances']));
+
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.requests', ['type' => 'cash-advances']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('SuperAdmin/CashAdvances/Index')
-                ->has('advances', 1)
-                ->where('summary.pending', 1));
+                ->component('SuperAdmin/Requests/Index')
+                ->has('cashAdvances.advances', 1)
+                ->where('cashAdvances.summary.pending', 1)
+                ->where('pendingCashAdvances', 1));
 
         $this->actingAs($this->superAdmin)
             ->post(route('super-admin.cash-advances.approve', $advance))
@@ -89,8 +111,8 @@ class CashAdvanceTest extends TestCase
         Notification::assertSentTo($advance->employee, CashAdvanceDecided::class);
 
         $this->actingAs($this->superAdmin)
-            ->get(route('super-admin.cash-advances', ['tab' => 'active']))
-            ->assertInertia(fn (Assert $page) => $page->has('advances', 1)->where('summary.outstanding', 4000));
+            ->get(route('super-admin.requests', ['type' => 'cash-advances', 'tab' => 'active']))
+            ->assertInertia(fn (Assert $page) => $page->has('cashAdvances.advances', 1)->where('cashAdvances.summary.outstanding', 4000));
     }
 
     public function test_the_super_admin_rejects_a_request(): void

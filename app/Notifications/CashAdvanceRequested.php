@@ -25,7 +25,7 @@ class CashAdvanceRequested extends ArkaNotification
 
     protected function url(object $notifiable): ?string
     {
-        return route('super-admin.cash-advances', absolute: false);
+        return route('super-admin.requests', ['type' => 'cash-advances'], absolute: false);
     }
 
     protected function category(): string

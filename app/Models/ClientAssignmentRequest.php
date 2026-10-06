@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * or rejects it. Once approved, the Admin can schedule the contractor for that client.
  */
 #[Fillable([
-    'employee_id', 'client_id', 'client_name', 'employment_type', 'requested_by', 'start_date',
+    'employee_id', 'client_id', 'client_name', 'employment_type', 'break_allowance_minutes', 'requested_by', 'start_date',
     'status', 'reviewed_by', 'reviewed_at', 'review_note', 'rate_id',
 ])]
 class ClientAssignmentRequest extends Model
@@ -34,6 +34,7 @@ class ClientAssignmentRequest extends Model
     {
         return [
             'employment_type' => EmploymentType::class,
+            'break_allowance_minutes' => 'integer',
             'start_date' => 'immutable_date',
             'reviewed_at' => 'datetime',
         ];

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['employee_id', 'amount', 'remaining_balance', 'reason', 'status', 'approved_by', 'approved_at', 'released_date'])]
+#[Fillable(['employee_id', 'amount', 'requested_amount', 'gross_pay', 'payday', 'remaining_balance', 'reason', 'status', 'approved_by', 'approved_at', 'released_date'])]
 class CashAdvance extends Model
 {
     use HasFactory;
@@ -20,6 +20,10 @@ class CashAdvance extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'requested_amount' => 'decimal:2',
+            // The contractor's gross pay for the pay period it was requested in (the limit), and that payday.
+            'gross_pay' => 'decimal:2',
+            'payday' => 'immutable_date',
             'remaining_balance' => 'decimal:2',
             'status' => CashAdvanceStatus::class,
             'approved_at' => 'datetime',

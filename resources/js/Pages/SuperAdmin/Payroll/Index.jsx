@@ -3,13 +3,13 @@ import Field, { ConsoleButton, SelectField } from '@/Components/Console/Field';
 import Panel, { PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
 import { PlusIcon } from '@/Components/Icons';
-import PayrollOverviewCard from '@/Components/Payroll/PayrollOverviewCard';
-import { periodTone } from '@/Components/Payroll/PayrollStages';
+import PayrollOverviewCard, { FrequencyPicker } from '@/Components/Payroll/PayrollOverviewCard';
+import { StageActions, periodTone } from '@/Components/Payroll/PayrollStages';
 import VerificationResults from '@/Components/Payroll/VerificationResults';
 import Table, { Cell, Row } from '@/Components/Workforce/Table';
 import AppLayout from '@/Layouts/AppLayout';
-import { fullDate, peso } from '@/lib/format';
-import { Link, useForm } from '@inertiajs/react';
+import { dateRange, fullDate, peso } from '@/lib/format';
+import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
 function PeriodForm({ suggested, frequencies, onDone }) {
@@ -79,9 +79,20 @@ const tabs = [
     { key: 'verification', label: 'Payroll verified' },
 ];
 
-export default function Index({ tab, current, periods, verification, frequencies, suggested }) {
+export default function Index({ tab, frequency, current, upcoming, periods, verification, frequencies, suggested }) {
     const [creating, setCreating] = useState(false);
-    const currentPeriods = periods.filter((period) => period.id === current.period.id);
+    // Payroll periods tab: '' = all pay frequencies.
+    const [listFrequency, setListFrequency] = useState('');
+    const currentPeriods = current ? periods.filter((period) => period.id === current.period.id) : [];
+    const shownPeriods = listFrequency ? periods.filter((period) => period.frequencyValue === listFrequency) : periods;
+
+    // The overview shows one pay frequency at a time.
+    const frequencyPicker = {
+        value: frequency,
+        options: frequencies,
+        onChange: (value) => router.get(route('super-admin.payroll'), value === 'semi_monthly' ? {} : { frequency: value }, { preserveScroll: true }),
+    };
+    const frequencyLabel = frequencies.find((option) => option.value === frequency)?.label ?? '';
 
     return (
         <AppLayout title="Payroll Management" eyebrow="Payroll">
@@ -115,25 +126,85 @@ export default function Index({ tab, current, periods, verification, frequencies
 
                 {tab === 'overview' && (
                     <>
-                        <PayrollOverviewCard overview={current} />
-
-                        <Panel>
-                            <PanelHeading title="Payroll in this overview" subtitle="The period shown above. Open it to review the payroll per contractor." />
-                            <div className="mt-6">
-                                <PeriodTable
-                                    periods={currentPeriods}
-                                    emptyMessage="This period is not created yet. Open verification from the overview above, or create it with New period."
+                        {upcoming && (
+                            // The current period has no payroll yet: it can still be started here, while the card below shows the latest payroll.
+                            <Panel>
+                                <PanelHeading
+                                    title={`Current period · ${dateRange(upcoming.period.startDate, upcoming.period.endDate)}`}
+                                    subtitle={`${upcoming.period.isProjected ? 'Not created yet' : upcoming.period.statusLabel} · no payroll calculated yet. Below is the latest period that has payroll.`}
                                 />
-                            </div>
-                        </Panel>
+                                <div className="mt-5">
+                                    <StageActions overview={upcoming} />
+                                </div>
+                            </Panel>
+                        )}
+
+                        {current ? (
+                            <>
+                                <PayrollOverviewCard overview={current} frequencyPicker={frequencyPicker} />
+
+                                <Panel>
+                                    <PanelHeading title="Payroll in this overview" subtitle="The period shown above. Open it to review the payroll per contractor." />
+                                    <div className="mt-6">
+                                        <PeriodTable
+                                            periods={currentPeriods}
+                                            emptyMessage="This period is not created yet. Open verification from the overview above, or create it with New period."
+                                        />
+                                    </div>
+                                </Panel>
+                            </>
+                        ) : (
+                            <Panel>
+                                <PanelHeading
+                                    title="Payroll overview"
+                                    subtitle={
+                                        <>
+                                            No period yet
+                                            <FrequencyPicker picker={frequencyPicker} />
+                                        </>
+                                    }
+                                />
+                                <p className="mt-6 text-sm text-console-muted">
+                                    No {frequencyLabel.toLowerCase()} payroll period has been created yet. Create one with New period.
+                                </p>
+                            </Panel>
+                        )}
                     </>
                 )}
 
                 {tab === 'periods' && (
                     <Panel>
                         <PanelHeading title="Payroll periods" subtitle="Every period, from open to released. Open one to review the payroll per contractor." />
+                        <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Filter by pay frequency">
+                            {[{ value: '', label: 'All' }, ...frequencies].map((option) => {
+                                const count = option.value ? periods.filter((period) => period.frequencyValue === option.value).length : periods.length;
+
+                                return (
+                                    <button
+                                        key={option.value || 'all'}
+                                        type="button"
+                                        onClick={() => setListFrequency(option.value)}
+                                        aria-pressed={listFrequency === option.value}
+                                        className={`border px-4 py-2 text-sm font-medium transition-colors ${
+                                            listFrequency === option.value
+                                                ? 'border-arka-teal bg-arka-teal text-white'
+                                                : 'border-console-line text-console-heading hover:border-arka-teal hover:text-arka-teal'
+                                        }`}
+                                    >
+                                        {option.label} ({count})
+                                    </button>
+                                );
+                            })}
+                        </div>
                         <div className="mt-6">
-                            <PeriodTable periods={periods} emptyMessage="No payroll periods yet. Create one with New period." />
+                            <PeriodTable
+                                periods={shownPeriods}
+                                emptyMessage={
+                                    periods.length === 0
+                                        ? 'No payroll periods yet. Create one with New period.'
+                                        : `No ${frequencies.find((option) => option.value === listFrequency)?.label.toLowerCase()} payroll periods.`
+                                }
+                            />
                         </div>
                     </Panel>
                 )}

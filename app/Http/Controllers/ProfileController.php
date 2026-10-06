@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-//use Laravel\Passkeys\Passkey;
+use Laravel\Passkeys\Passkey;
+
+// use Laravel\Passkeys\Passkey;
 
 /**
  * Profile & Security (Blueprint §3.4). Accounts are never self-deleted: they are deactivated

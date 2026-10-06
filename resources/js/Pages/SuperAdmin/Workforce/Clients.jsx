@@ -9,7 +9,7 @@ import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import { shortDate } from '@/lib/format';
 import { Link } from '@inertiajs/react';
 
-/** View-only: Admins add clients when they assign them; the Super Admin approves in Requests & Approvals. */
+/** View-only: Admins add clients (with their break allowance) when they assign them; the Super Admin approves in Requests & Approvals. */
 export default function Clients({ clients, filters, counts }) {
     const { search, setSearch, apply } = useFilters('super-admin.workforce.clients.index', filters);
 
@@ -40,7 +40,7 @@ export default function Clients({ clients, filters, counts }) {
                     </div>
 
                     <Table
-                        columns={['Client', 'Code', 'Assigned contractors', 'Status', 'Added']}
+                        columns={['Client', 'Code', 'Assigned contractors', 'Break allowance', 'Status', 'Added']}
                         actions={false}
                         isEmpty={clients.data.length === 0}
                         emptyMessage={filters.search || filters.status ? 'No clients match these filters.' : 'No clients yet. They appear once you approve an Admin’s client assignment.'}
@@ -61,6 +61,7 @@ export default function Clients({ clients, filters, counts }) {
                                         <span className="text-console-dim">0</span>
                                     )}
                                 </Cell>
+                                <Cell className="font-mono text-console-text">{client.breakAllowance} min</Cell>
                                 <Cell>
                                     <StatusBadge status={client.status} />
                                 </Cell>

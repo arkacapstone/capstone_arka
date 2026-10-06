@@ -36,13 +36,14 @@ class ViewModeTest extends TestCase
                 ->where('canSwitchView', true)
                 ->where('navigation.1.key', 'time-tracker')
                 ->where('navigation.1.children.0.key', 'time-history')
+                ->where('navigation.2.key', 'my-attendance')
             );
 
         $this->post(route('view-mode.switch'), ['mode' => 'admin'])
             ->assertRedirect(route('admin.dashboard'));
 
         $this->get(route('admin.dashboard'))
-            ->assertInertia(fn (Assert $page) => $page->where('viewMode', 'admin')->where('navigation.1.key', 'employees'));
+            ->assertInertia(fn (Assert $page) => $page->where('viewMode', 'admin')->where('navigation.2.key', 'employees'));
     }
 
     public function test_opening_a_page_puts_the_admin_in_the_matching_view(): void
@@ -56,7 +57,7 @@ class ViewModeTest extends TestCase
         $this->get(route('profile.edit'))->assertInertia(fn (Assert $page) => $page->where('viewMode', 'employee'));
 
         $this->get(route('admin.employees.index'))
-            ->assertInertia(fn (Assert $page) => $page->where('viewMode', 'admin')->where('navigation.1.key', 'employees'));
+            ->assertInertia(fn (Assert $page) => $page->where('viewMode', 'admin')->where('navigation.2.key', 'employees'));
         $this->get(route('profile.edit'))->assertInertia(fn (Assert $page) => $page->where('viewMode', 'admin'));
     }
 

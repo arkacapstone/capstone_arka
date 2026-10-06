@@ -39,6 +39,20 @@ class PayrollPeriodResolver
             ?? $this->projectSemiMonthly($today);
     }
 
+    /**
+     * The period of this pay frequency that applies today: a created one covering today, otherwise
+     * (Semi-monthly) the projected one, or (Weekly, Monthly) the latest one created. Null when no
+     * period of that frequency exists yet.
+     */
+    public function currentFor(PayFrequency $frequency, ?CarbonImmutable $today = null): ?PayrollPeriod
+    {
+        $today ??= CarbonImmutable::today();
+        $periods = PayrollPeriod::query()->where('pay_frequency', $frequency)->orderByDesc('start_date')->orderByDesc('id');
+
+        return (clone $periods)->covering($today)->first()
+            ?? ($frequency === PayFrequency::SemiMonthly ? $this->projectSemiMonthly($today) : $periods->first());
+    }
+
     public function projectSemiMonthly(CarbonImmutable $today): PayrollPeriod
     {
         $firstCutoff = $this->day('first_cutoff_day');

@@ -7,13 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['period_id', 'employee_id', 'verified_at'])]
+#[Fillable(['period_id', 'employee_id', 'verified_at', 'auto_submitted'])]
 class AttendanceVerification extends Model
 {
     protected function casts(): array
     {
         return [
             'verified_at' => 'datetime',
+            // Submitted for the contractor when the Admin submitted the period: attendance used as recorded.
+            'auto_submitted' => 'boolean',
         ];
     }
 

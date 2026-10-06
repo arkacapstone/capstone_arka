@@ -58,13 +58,14 @@ class ClientAssignmentTest extends TestCase
         ];
     }
 
-    private function submit(string $client = 'Aurora Dental', string $type = 'full_time', ?User $contractor = null): ClientAssignmentRequest
+    private function submit(string $client = 'Aurora Dental', string $type = 'full_time', ?User $contractor = null, int $break = 60): ClientAssignmentRequest
     {
         $this->actingAs($this->admin)
             ->post(route('admin.scheduling.clients.store'), [
                 'employee_id' => ($contractor ?? $this->contractor)->id,
                 'client_name' => $client,
                 'employment_type' => $type,
+                'break_allowance_minutes' => $break,
                 'start_date' => '2026-09-28',
             ])
             ->assertSessionHasNoErrors();
@@ -154,20 +155,22 @@ class ClientAssignmentTest extends TestCase
                 ->where('assignments.0.schedules', 0));
     }
 
-    public function test_each_schedule_has_its_own_break_allowance(): void
+    public function test_each_client_has_its_own_break_allowance(): void
     {
         Notification::fake();
-        $this->approve($this->submit('Aurora Dental'));
-        $this->approve($this->submit('Northline', 'part_time'));
+        // The Admin sets the break when assigning the client; it is the client's once approved.
+        $this->approve($this->submit('Aurora Dental', break: 30));
+        $this->approve($this->submit('Northline', 'part_time', break: 45));
+        $this->assertSame(45, Client::named('Northline')->break_allowance_minutes);
 
-        foreach (['Aurora Dental' => [30, '09:00'], 'Northline' => [45, '18:00']] as $client => [$break, $start]) {
+        // Schedules carry no break allowance of their own.
+        foreach (['Aurora Dental' => '09:00', 'Northline' => '18:00'] as $client => $start) {
             $this->actingAs($this->admin)->post(route('admin.scheduling.store'), [
                 'employee_id' => $this->contractor->id,
                 'client_id' => Client::named($client)->id,
                 'working_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
                 'start_time' => $start,
                 'end_time' => '23:59',
-                'break_allowance_minutes' => $break,
                 'start_date' => '2026-09-25',
             ])->assertSessionHasNoErrors();
         }
@@ -180,15 +183,18 @@ class ClientAssignmentTest extends TestCase
         $this->assertSame(30, $cards['Aurora Dental']);
         $this->assertSame(45, $cards['Northline']);
 
-        $this->actingAs($this->admin)->post(route('admin.scheduling.store'), [
-            'employee_id' => $this->contractor->id,
-            'client_id' => Client::named('Aurora Dental')->id,
-            'working_days' => ['sat'],
-            'start_time' => '09:00',
-            'end_time' => '17:00',
-            'break_allowance_minutes' => 500,
-            'start_date' => '2026-09-25',
-        ])->assertSessionHasErrors('break_allowance_minutes');
+        // The assign form fills in an existing client's break.
+        $this->actingAs($this->admin)
+            ->get(route('admin.scheduling.clients.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('clientBreaks.northline', 45));
+
+        // Another contractor on Northline: the same client, so the same break for everyone on it.
+        $this->approve($this->submit('Northline', 'full_time', User::factory()->create(), 20));
+        $this->assertSame(20, Client::named('Northline')->break_allowance_minutes);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'Harbor Vet', 'employment_type' => 'part_time', 'break_allowance_minutes' => 500, 'start_date' => '2026-09-28'])
+            ->assertSessionHasErrors('break_allowance_minutes');
     }
 
     public function test_approval_takes_hours_from_the_client_type_and_refuses_hourly_pay(): void
@@ -258,7 +264,6 @@ class ClientAssignmentTest extends TestCase
             'working_days' => ['mon', 'tue', 'wed', 'thu', 'fri'],
             'start_time' => $start,
             'end_time' => '23:59',
-            'break_allowance_minutes' => 60,
             'start_date' => '2026-09-28',
         ];
 
@@ -310,13 +315,13 @@ class ClientAssignmentTest extends TestCase
         $this->submit();
 
         $this->actingAs($this->admin)
-            ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'AURORA DENTAL', 'employment_type' => 'part_time', 'start_date' => '2026-09-28'])
+            ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'AURORA DENTAL', 'employment_type' => 'part_time', 'break_allowance_minutes' => 60, 'start_date' => '2026-09-28'])
             ->assertSessionHasErrors('client_name');
 
         $this->approve(ClientAssignmentRequest::query()->sole());
 
         $this->actingAs($this->admin)
-            ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'Aurora Dental', 'employment_type' => 'full_time', 'start_date' => '2026-10-01'])
+            ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'Aurora Dental', 'employment_type' => 'full_time', 'break_allowance_minutes' => 60, 'start_date' => '2026-10-01'])
             ->assertSessionHasErrors('client_name');
 
         $this->assertDatabaseCount(ClientAssignmentRequest::class, 1);

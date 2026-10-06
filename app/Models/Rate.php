@@ -62,14 +62,9 @@ class Rate extends Model
 
     /**
      * Hourly Rate = Gross Pay ÷ (Working Days × Hours per Day) (Blueprint §11).
-     * For hourly arrangements the gross pay already is the hourly rate.
      */
     public function hourlyRate(): float
     {
-        if ($this->pay_frequency === PayFrequency::Hourly) {
-            return (float) $this->gross_pay;
-        }
-
         return (float) $this->gross_pay / ($this->working_days * $this->hours_per_day);
     }
 
@@ -78,10 +73,6 @@ class Rate extends Model
      */
     public function dailyRate(): float
     {
-        if ($this->pay_frequency === PayFrequency::Hourly) {
-            return (float) $this->gross_pay * $this->hours_per_day;
-        }
-
         return (float) $this->gross_pay / $this->working_days;
     }
 }

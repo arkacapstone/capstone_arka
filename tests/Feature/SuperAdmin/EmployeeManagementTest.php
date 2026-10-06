@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\SuperAdmin;
 
-use App\Enums\UserRole;
+use App\Enums\EmploymentType;
 use App\Models\Client;
 use App\Models\Rate;
 use App\Models\User;
+use App\Services\Settings\SystemRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -62,20 +64,29 @@ class EmployeeManagementTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1));
     }
 
-    public function test_super_admin_creates_a_contractor_whose_type_comes_from_their_clients(): void
+    public function test_a_contractor_whose_assignment_ended_shows_their_last_client(): void
     {
+        $client = Client::factory()->create(['client_name' => 'Sample Client A']);
+        $ended = User::factory()->create(['name' => 'Ended Person']);
+        Rate::factory()->for($ended, 'employee')->for($client)->create(['effective_date' => '2026-01-01', 'end_date' => now()->subWeek()->toDateString()]);
+
         $this->actingAs($this->superAdmin)
-            ->post(route('super-admin.workforce.employees.store'), [
-                'name' => 'Christian Mae',
-                'email' => 'christian.mae@arka.co',
-            ])
-            ->assertSessionHas('success');
+            ->get(route('super-admin.workforce.employees.index', ['search' => 'Ended Person']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('employees.data.0.assignments', 0)
+                ->where('employees.data.0.endedAssignments.0.client.name', 'Sample Client A'));
+    }
 
-        $employee = User::query()->where('email', 'christian.mae@arka.co')->firstOrFail();
+    public function test_only_admins_add_contractors(): void
+    {
+        // The Super Admin views and edits contractors; there is no way for them to add one.
+        $this->assertFalse(Route::has('super-admin.workforce.employees.store'));
 
-        $this->assertSame(UserRole::Employee, $employee->role);
-        $this->assertNull($employee->employment_type); // set once an approved client is Full-Time or Part-Time
-        $this->assertTrue($employee->isInvited());
+        $this->actingAs($this->superAdmin)
+            ->post('/super-admin/workforce/employees', ['name' => 'Christian Mae', 'email' => 'christian.mae@arka.co'])
+            ->assertMethodNotAllowed();
+
+        $this->assertDatabaseMissing(User::class, ['email' => 'christian.mae@arka.co']);
     }
 
     public function test_changing_a_rate_keeps_the_old_rate_in_history(): void
@@ -83,15 +94,19 @@ class EmployeeManagementTest extends TestCase
         $employee = User::factory()->create();
         $rate = Rate::factory()->for($employee, 'employee')->create([
             'gross_pay' => 20000,
+            'employment_type' => EmploymentType::PartTime,
             'effective_date' => '2026-01-01',
         ]);
+
+        app(SystemRules::class)->update(['default_working_days' => 10, 'part_time_hours' => 4], $this->superAdmin);
 
         $this->actingAs($this->superAdmin)
             ->put(route('super-admin.workforce.employees.rates.update', [$employee, $rate]), [
                 'gross_pay' => 22000,
                 'pay_frequency' => 'semi_monthly',
-                'working_days' => 11,
-                'hours_per_day' => 8,
+                // Not editable on the rate: ignored in favour of System & Rules.
+                'working_days' => 20,
+                'hours_per_day' => 12,
                 'effective_date' => '2026-10-01',
             ])
             ->assertSessionHasNoErrors();
@@ -103,6 +118,10 @@ class EmployeeManagementTest extends TestCase
         $this->assertSame('22000.00', $current->gross_pay);
         $this->assertSame($rate->client_id, $current->client_id);
         $this->assertSame('2026-10-01', $current->effective_date->toDateString());
+
+        // Working days and hours come from System & Rules (hours by the client's Full-Time / Part-Time type).
+        $this->assertSame(10, $current->working_days);
+        $this->assertSame(4, $current->hours_per_day);
     }
 
     public function test_a_new_rate_must_start_after_the_current_one(): void

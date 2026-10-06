@@ -11,10 +11,9 @@ import { useState } from 'react';
 const statusTone = { approved: 'running', repaid: 'completed' };
 
 /** The contractor's own cash advances: request one, follow the decision and the balance (Blueprint §13). */
-export default function CashAdvances({ advances, rules }) {
+export default function CashAdvances({ advances, requestWindow }) {
     const [open, setOpen] = useState(false);
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({ amount: '', reason: '' });
-    const hasPending = advances.some((advance) => advance.status === 'pending');
     const outstanding = advances.filter((advance) => advance.status === 'approved').reduce((total, advance) => total + advance.remaining, 0);
 
     const close = () => {
@@ -32,13 +31,15 @@ export default function CashAdvances({ advances, rules }) {
         <Panel>
             <PanelHeading
                 title="Cash advances"
-                subtitle={`Ask for up to ${peso(rules.maxAmount)} before payday. Once the Super Admin approves, you get it right away, and the full amount is deducted from your next payslip.`}
+                subtitle={`You can ask once a month, any day before payday, for up to your gross pay for that pay period. Once the Super Admin approves, you get it right away, and the full amount is deducted from that payday's payslip.`}
                 action={
-                    <ConsoleButton onClick={() => setOpen(true)} disabled={hasPending} title={hasPending ? 'You already have a request waiting for a decision.' : undefined}>
+                    <ConsoleButton onClick={() => setOpen(true)} disabled={!requestWindow.open} title={requestWindow.reason ?? undefined}>
                         <PlusIcon className="h-4 w-4" /> Request cash advance
                     </ConsoleButton>
                 }
             />
+
+            {!requestWindow.open && <p className="mt-4 text-sm text-console-muted">{requestWindow.reason}</p>}
 
             {outstanding > 0 && (
                 <p className="mt-4 font-mono text-sm text-console-text">
@@ -59,7 +60,11 @@ export default function CashAdvances({ advances, rules }) {
                                 {fullDate(advance.requestedAt.slice(0, 10))}
                                 <p className="text-xs text-console-dim">{timeAgo(advance.requestedAt)}</p>
                             </Cell>
-                            <Cell className="font-mono">{peso(advance.amount)}</Cell>
+                            <Cell className="font-mono">
+                                {peso(advance.amount)}
+                                {advance.requestedAmount !== advance.amount && <p className="text-xs text-console-dim">asked {peso(advance.requestedAmount)}</p>}
+                                {advance.payday && <p className="text-xs text-console-dim">payday {fullDate(advance.payday)}</p>}
+                            </Cell>
                             <Cell className="font-mono">{advance.releasedDate ? peso(advance.remaining) : '—'}</Cell>
                             <Cell className="max-w-xs text-console-muted">{advance.reason}</Cell>
                             <Cell>
@@ -88,7 +93,7 @@ export default function CashAdvances({ advances, rules }) {
                 onClose={close}
                 side
                 title="Request a cash advance"
-                description={rules.maxAmount > 0 ? `Up to ${peso(rules.maxAmount)}. The Super Admin decides and you'll be notified.` : "The Super Admin decides and you'll be notified."}
+                description={`Up to ${peso(requestWindow.limit)}. The full amount is deducted from your payslip on ${requestWindow.payday ? fullDate(requestWindow.payday) : 'payday'}. The Super Admin decides how much to release and you'll be notified.`}
             >
                 <form onSubmit={submit} className="flex flex-col gap-5">
                     <Field
@@ -97,7 +102,7 @@ export default function CashAdvances({ advances, rules }) {
                         type="number"
                         min="1"
                         step="0.01"
-                        max={rules.maxAmount > 0 ? rules.maxAmount : undefined}
+                        max={requestWindow.limit}
                         value={data.amount}
                         onChange={(e) => setData('amount', e.target.value)}
                         error={errors.amount}

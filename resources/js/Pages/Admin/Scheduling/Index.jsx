@@ -68,7 +68,6 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
         working_days: schedule?.workingDays ?? ['mon', 'tue', 'wed', 'thu', 'fri'],
         start_time: schedule?.startTime ?? '09:00',
         end_time: schedule?.endTime ?? '18:00',
-        break_allowance_minutes: schedule?.breakAllowance ?? 60,
         end_date: schedule?.endDate ?? '',
     });
 
@@ -200,21 +199,6 @@ function ScheduleForm({ schedule, employees, clients, weekdays, shiftHours, pres
                     {hours.overnight ? ' · graveyard shift, ends the next day' : ''}
                 </p>
             )}
-
-            <div>
-                <Field
-                    id="break_allowance_minutes"
-                    type="number"
-                    min="0"
-                    max="240"
-                    label="Break allowance (minutes)"
-                    value={data.break_allowance_minutes}
-                    onChange={(e) => setData('break_allowance_minutes', e.target.value)}
-                    error={errors.break_allowance_minutes}
-                    required
-                />
-                <p className="mt-1.5 text-xs text-console-muted">Shown on the contractor's Time Tracker for awareness only; going over never reduces pay.</p>
-            </div>
 
             <div className="grid grid-cols-2 gap-4">
                 {changing ? (

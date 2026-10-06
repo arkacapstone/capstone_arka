@@ -19,15 +19,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A change never erases a schedule: it ends the current one and starts a new
  * applicable period, so attendance is always compared with the schedule in effect that day.
  */
-#[Fillable(['employee_id', 'client_id', 'work_schedule_id', 'job_position', 'working_days', 'start_time', 'end_time', 'break_allowance_minutes', 'start_date', 'end_date', 'status'])]
+#[Fillable(['employee_id', 'client_id', 'work_schedule_id', 'job_position', 'working_days', 'start_time', 'end_time', 'start_date', 'end_date', 'status'])]
 class Schedule extends Model
 {
     use HasFactory;
-
-    /**
-     * Break minutes per session when the Admin does not set one. Informational only: going over never reduces pay.
-     */
-    public const DEFAULT_BREAK_ALLOWANCE = 60;
 
     /**
      * Most working days a contractor can be scheduled for in a week, across all their clients.
@@ -49,7 +44,6 @@ class Schedule extends Model
     {
         return [
             'working_days' => 'array',
-            'break_allowance_minutes' => 'integer',
             'start_date' => 'immutable_date',
             'end_date' => 'immutable_date',
         ];

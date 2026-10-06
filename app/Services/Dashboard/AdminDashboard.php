@@ -55,7 +55,7 @@ class AdminDashboard
     {
         $parts = [];
 
-        if (($data['verification']['period']['canSubmit'] ?? false) === true) {
+        if (($data['verification']['period']['canSubmit'] ?? false) === true && $data['verification']['counts']['waiting'] === 0) {
             $parts[] = 'A verified payroll period is ready to submit to the Super Admin.';
         }
 

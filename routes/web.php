@@ -62,7 +62,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
         Route::prefix('workforce/employees')->name('workforce.employees.')->group(function () {
             Route::controller(EmployeeController::class)->group(function () {
                 Route::get('/', 'index')->name('index');
-                Route::post('/', 'store')->name('store');
+                // No store: Admins add contractors (Admin → Contractor Management); the Super Admin views and edits them.
                 Route::get('{account}', 'show')->name('show');
                 Route::put('{account}', 'update')->name('update');
                 Route::patch('{account}/status', 'updateStatus')->name('status');
@@ -75,7 +75,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
             });
         });
 
-        // View-only: Admins add clients; the Super Admin approves assignments in Requests & Approvals.
+        // View-only: Admins add clients (with their break allowance); the Super Admin approves assignments in Requests & Approvals.
         Route::get('workforce/clients', [ClientController::class, 'index'])->name('workforce.clients.index');
 
         // Company equipment; a lost device is deducted at its own value.
@@ -117,6 +117,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
             Route::post('{assignment}/reject', 'rejectAssignment')->name('reject');
         });
 
+        // Cash advances are listed under Requests & Approvals; the old address redirects there.
         Route::get('cash-advances', [CashAdvanceController::class, 'index'])->name('cash-advances');
         Route::prefix('cash-advances')->name('cash-advances.')->controller(CashAdvanceController::class)->group(function () {
             Route::post('{advance}/approve', 'approve')->name('approve');

@@ -15,12 +15,14 @@ import { useState } from 'react';
 const statusTone = { available: 'closed', assigned: 'live', lost: 'waiting' };
 const statusLabel = { available: 'Available', assigned: 'Assigned', lost: 'Lost' };
 
-function DeviceForm({ device, onDone }) {
+function DeviceForm({ device, types, contractors, onDone }) {
     const { data, setData, post, put, processing, errors } = useForm({
+        device_type: device?.type ?? types[0],
         device_name: device?.name ?? '',
-        device_type: device?.type ?? '',
         serial_number: device?.serial ?? '',
         value: device?.value ?? '',
+        // A new device can go straight to a contractor; an existing one is assigned from its row.
+        ...(device ? {} : { employee_id: '', assigned_date: todayIso() }),
     });
 
     const submit = (e) => {
@@ -31,15 +33,52 @@ function DeviceForm({ device, onDone }) {
 
     return (
         <form onSubmit={submit} className="flex flex-col gap-5">
-            <Field id="device_name" label="Device" value={data.device_name} onChange={(e) => setData('device_name', e.target.value)} error={errors.device_name} placeholder="e.g. Lenovo ThinkPad E14" required />
-            <div className="grid grid-cols-2 gap-4">
-                <Field id="device_type" label="Type (optional)" value={data.device_type} onChange={(e) => setData('device_type', e.target.value)} error={errors.device_type} placeholder="Laptop" />
-                <Field id="serial_number" label="Serial number (optional)" value={data.serial_number} onChange={(e) => setData('serial_number', e.target.value)} error={errors.serial_number} />
-            </div>
+            <SelectField
+                id="device_type"
+                label="Type"
+                value={data.device_type}
+                onChange={(e) => setData('device_type', e.target.value)}
+                error={errors.device_type}
+                options={types.map((type) => ({ value: type, label: type }))}
+            />
+            <Field
+                id="device_name"
+                label="Brand / model"
+                value={data.device_name}
+                onChange={(e) => setData('device_name', e.target.value)}
+                error={errors.device_name}
+                placeholder={data.device_type === 'Other' ? 'What is it? e.g. Docking station' : 'e.g. Logitech K120'}
+                required
+            />
+            <Field id="serial_number" label="Serial number (optional)" value={data.serial_number} onChange={(e) => setData('serial_number', e.target.value)} error={errors.serial_number} />
             <div>
                 <Field id="value" type="number" step="0.01" min="0.01" label="Value (₱)" value={data.value} onChange={(e) => setData('value', e.target.value)} error={errors.value} required />
                 <p className="mt-1.5 text-xs text-console-muted">If this device is lost, this amount is deducted from the contractor's next payroll.</p>
             </div>
+            {!device && (
+                <div className="flex flex-col gap-4 border-t border-console-line pt-5">
+                    <SelectField
+                        id="employee_id"
+                        label="Assign to (optional)"
+                        value={data.employee_id}
+                        onChange={(e) => setData('employee_id', e.target.value)}
+                        error={errors.employee_id}
+                        placeholder="Not yet — keep it available"
+                        options={contractors}
+                    />
+                    {data.employee_id !== '' && (
+                        <Field
+                            id="assigned_date"
+                            type="date"
+                            label="Given on"
+                            value={data.assigned_date}
+                            onChange={(e) => setData('assigned_date', e.target.value)}
+                            error={errors.assigned_date}
+                            required
+                        />
+                    )}
+                </div>
+            )}
             <ConsoleButton disabled={processing}>{device ? 'Save device' : 'Add device'}</ConsoleButton>
         </form>
     );
@@ -62,7 +101,7 @@ function AssignForm({ device, contractors, onDone }) {
     );
 }
 
-export default function Devices({ devices, filters, counts, contractors }) {
+export default function Devices({ devices, filters, counts, contractors, types }) {
     const { search, setSearch, apply } = useFilters('super-admin.workforce.devices.index', filters);
     const [editing, setEditing] = useState(null); // null = closed, {} = new, device = edit
     const [assigning, setAssigning] = useState(null);
@@ -119,8 +158,9 @@ export default function Devices({ devices, filters, counts, contractors }) {
                         {devices.map((device) => (
                             <Row key={device.id}>
                                 <Cell>
-                                    <p className="font-medium text-console-heading">{device.name}</p>
-                                    <p className="font-mono text-[11px] text-console-dim">{[device.type, device.serial].filter(Boolean).join(' · ') || '—'}</p>
+                                    <p className="font-medium text-console-heading">{device.type ?? 'Device'}</p>
+                                    <p className="text-xs text-console-text">{device.name}</p>
+                                    {device.serial && <p className="font-mono text-[11px] text-console-dim">SN {device.serial}</p>}
                                 </Cell>
                                 <Cell className="font-mono">{peso(device.value)}</Cell>
                                 <Cell>
@@ -180,7 +220,7 @@ export default function Devices({ devices, filters, counts, contractors }) {
             </div>
 
             <Dialog open={editing !== null} onClose={() => setEditing(null)} side title={editing?.id ? 'Edit device' : 'Add device'}>
-                {editing !== null && <DeviceForm key={editing.id ?? 'new'} device={editing.id ? editing : null} onDone={() => setEditing(null)} />}
+                {editing !== null && <DeviceForm key={editing.id ?? 'new'} device={editing.id ? editing : null} types={types} contractors={contractors} onDone={() => setEditing(null)} />}
             </Dialog>
 
             <Dialog open={assigning !== null} onClose={() => setAssigning(null)} side title="Assign device" description={assigning?.name}>

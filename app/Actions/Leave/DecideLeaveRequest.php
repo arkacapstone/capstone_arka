@@ -65,30 +65,28 @@ class DecideLeaveRequest
             }
 
             Schedule::query()
-                ->where('employee_id', $leave->employee_id)
+                ->forEmployee($leave->contractor_id)
+                ->with(['assignment', 'days'])
                 ->active()
                 ->applicableOn($date)
                 ->get()
                 ->filter(fn (Schedule $schedule) => $schedule->worksOn($date))
                 ->each(function (Schedule $schedule) use ($leave, $date, $status) {
                     $attendance = Attendance::query()
-                        ->where('employee_id', $leave->employee_id)
-                        ->where('client_id', $schedule->client_id)
+                        ->where('assignment_id', $schedule->assignment_id)
                         ->whereDate('date', $date)
-                        ->first() ?? new Attendance(['employee_id' => $leave->employee_id, 'client_id' => $schedule->client_id, 'date' => $date]);
+                        ->first() ?? new Attendance(['assignment_id' => $schedule->assignment_id, 'date' => $date]);
 
                     if ($attendance->time_in !== null) {
                         return;
                     }
 
+                    // The leave type is read through the leave request.
                     $attendance->fill([
-                        'schedule_id' => $schedule->id,
                         'status' => $status,
-                        'leave_type_id' => $leave->leave_type_id,
-                        'actual_hours' => null,
+                        'leave_request_id' => $leave->id,
                         'late_minutes' => 0,
                         'undertime_minutes' => 0,
-                        'break_minutes' => 0,
                     ])->save();
                 });
         }

@@ -4,9 +4,7 @@ namespace App\Actions\CashAdvances;
 
 use App\Enums\CashAdvanceStatus;
 use App\Enums\PayrollPeriodStatus;
-use App\Enums\PayrollStatus;
 use App\Models\CashAdvance;
-use App\Models\CashAdvanceRepayment;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\User;
@@ -40,8 +38,9 @@ class ManageCashAdvance
 
     /**
      * Whether the contractor can request a cash advance today, and for how much: any day of the pay
-     * period they are in, once a month, up to their gross pay for that period. It is repaid in full on
-     * that period's payday. The period need not be created yet; it is projected from System & Rules.
+     * period they are in, once a month, up to their gross pay for that period. It is repaid in
+     * installments over 2 or 3 months, starting on that period's payday. The period need not be
+     * created yet; it is projected from System & Rules.
      *
      * @return array{open: bool, reason: ?string, period: ?PayrollPeriod, limit: float}
      */
@@ -55,7 +54,7 @@ class ManageCashAdvance
             ->orderByDesc('start_date')
             ->get()
             ->push($this->periods->projectSemiMonthly($today))
-            ->first(fn (PayrollPeriod $period) => PayrollCalculator::ratesFor($period)->where('employee_id', $employee->id)->exists());
+            ->first(fn (PayrollPeriod $period) => PayrollCalculator::ratesFor($period)->forEmployee($employee->id)->exists());
 
         $limit = $period ? PayrollCalculator::grossFor($period, $employee) : 0.0;
 
@@ -73,7 +72,7 @@ class ManageCashAdvance
         return ['open' => $reason === null, 'reason' => $reason, 'period' => $period, 'limit' => round($limit, 2)];
     }
 
-    public function request(User $employee, float $amount, string $reason): CashAdvance
+    public function request(User $employee, float $amount, string $reason, int $repaymentMonths = 2): CashAdvance
     {
         $window = $this->window($employee);
 
@@ -85,12 +84,16 @@ class ManageCashAdvance
             throw ValidationException::withMessages(['amount' => 'The most you can request for this payday is ₱'.number_format($window['limit'], 2).'.']);
         }
 
+        if (! in_array($repaymentMonths, CashAdvance::REPAYMENT_MONTHS, true)) {
+            throw ValidationException::withMessages(['repayment_months' => 'Choose 2 or 3 months to repay it.']);
+        }
+
+        // The remaining balance is not stored: it is the amount less the repayments.
         $advance = $employee->cashAdvances()->create([
             'amount' => $amount,
             'requested_amount' => $amount,
-            'gross_pay' => $window['limit'],
+            'repayment_months' => $repaymentMonths,
             'payday' => $window['period']->release_date,
-            'remaining_balance' => $amount,
             'reason' => $reason,
             'status' => CashAdvanceStatus::Pending,
         ]);
@@ -131,7 +134,6 @@ class ManageCashAdvance
             'approved_at' => now(),
             'released_date' => $releasedOn,
             'amount' => $amount,
-            'remaining_balance' => $amount,
         ]);
 
         // Payroll already calculated: put the repayment on it now.
@@ -159,57 +161,13 @@ class ManageCashAdvance
     }
 
     /**
-     * When payslips are released, each cash advance deduction on the payroll becomes a
-     * repayment against the contractor's oldest outstanding advances. Held payroll is not paid
-     * yet, so it is applied once its hold is lifted (for that one contractor).
+     * Installments are recorded as repayments (linked to the payroll row) when payroll is
+     * calculated, so releasing payslips has nothing more to record. Kept so release and lifting a
+     * hold can still call it.
      */
     public function applyPayroll(PayrollPeriod $period, ?int $employeeId = null): void
     {
-        $period->payrolls()
-            ->where('status', PayrollStatus::Released)
-            ->when($employeeId, fn ($query) => $query->where('employee_id', $employeeId))
-            ->where('cash_advance_deduction', '>', 0)
-            ->get()
-            ->each(function (Payroll $row) use ($period) {
-                // Only what the pay actually covered is repaid; the rest stays owed for the next payday.
-                $left = max(0, round((float) $row->cash_advance_deduction - PayrollCalculator::shortfall($row), 2));
-
-                CashAdvance::query()
-                    ->outstanding()
-                    ->where('employee_id', $row->employee_id)
-                    ->orderBy('released_date')
-                    ->orderBy('id')
-                    ->get()
-                    ->each(function (CashAdvance $advance) use (&$left, $row, $period) {
-                        if ($left <= 0) {
-                            return false;
-                        }
-
-                        $amount = min($left, (float) $advance->remaining_balance);
-                        $this->repay($advance, $amount, $period->release_date, "Payroll · {$period->period_name}", $row);
-                        $left = round($left - $amount, 2);
-
-                        return true;
-                    });
-            });
-    }
-
-    private function repay(CashAdvance $advance, float $amount, CarbonImmutable $date, ?string $notes, ?Payroll $payroll = null): CashAdvanceRepayment
-    {
-        $repayment = $advance->repayments()->create([
-            'payroll_id' => $payroll?->id,
-            'amount' => round($amount, 2),
-            'repayment_date' => $date,
-            'notes' => $notes,
-        ]);
-
-        $remaining = round((float) $advance->remaining_balance - $amount, 2);
-        $advance->update([
-            'remaining_balance' => max(0, $remaining),
-            'status' => $remaining <= 0 ? CashAdvanceStatus::Repaid : CashAdvanceStatus::Approved,
-        ]);
-
-        return $repayment;
+        //
     }
 
     private function ensurePending(CashAdvance $advance): void

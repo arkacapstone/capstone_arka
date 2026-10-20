@@ -72,10 +72,11 @@ function MailSenderPanel({ mail }) {
         router.post(route('super-admin.rules.mail.test'), {}, { preserveScroll: true, onStart: () => setTesting(true), onFinish: () => setTesting(false) });
 
     return (
+        <div id="email-sender" className="scroll-mt-24">
         <Panel>
             <PanelHeading
                 title="Email sender"
-                subtitle="The Gmail account ARKA sends invite links and password resets from."
+                subtitle="Your home office's Gmail. ARKA sends invites, password resets and notifications to your contractors from it."
                 action={<Tag tone={mail.configured ? 'live' : 'waiting'}>{mail.configured ? 'Set up' : 'Not set up'}</Tag>}
             />
             <form onSubmit={submit} className="mt-6 grid gap-5 lg:grid-cols-3">
@@ -132,6 +133,7 @@ function MailSenderPanel({ mail }) {
                 </div>
             </form>
         </Panel>
+        </div>
     );
 }
 

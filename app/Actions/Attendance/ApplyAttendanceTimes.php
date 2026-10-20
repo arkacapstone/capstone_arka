@@ -38,8 +38,8 @@ class ApplyAttendanceTimes
         $schedule = $this->schedules->for($employee->id, $attendance->client_id, $date);
         $values = $this->calculator->calculate($schedule, $date, $in, $out, (int) $attendance->break_minutes);
 
+        // Setting the times moves the day's time logs (attendance keeps no times of its own).
         $attendance->fill([
-            'schedule_id' => $schedule?->id ?? $attendance->schedule_id,
             'time_in' => $in,
             'time_out' => $out,
             ...$values,
@@ -51,7 +51,7 @@ class ApplyAttendanceTimes
     private function newAttendance(User $employee, CarbonImmutable $date): Attendance
     {
         $clientId = $this->schedules->for($employee->id, null, $date)?->client_id
-            ?? $employee->currentRates()->value('client_id');
+            ?? $employee->currentRates()->with('assignment')->first()?->client_id;
 
         if ($clientId === null) {
             throw ValidationException::withMessages([

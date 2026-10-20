@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToAssignment;
+use App\Models\Concerns\PaidInPayroll;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,12 +17,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * it with the amount, and it is paid in the contractor's next payroll for that client.
  */
 #[Fillable([
-    'employee_id', 'client_id', 'date', 'minutes', 'client_handler', 'reason',
+    'assignment_id', 'employee_id', 'client_id', 'date', 'minutes', 'client_handler', 'reason',
     'status', 'amount', 'reviewed_by', 'reviewed_at', 'review_note', 'payroll_id',
 ])]
 class OvertimeRequest extends Model
 {
-    use HasFactory;
+    use BelongsToAssignment, HasFactory, PaidInPayroll;
+
+    /**
+     * The payroll line it was paid in is kept in payroll_overtime (see PaidInPayroll).
+     */
+    public const PAYROLL_JUNCTION = PayrollOvertime::class;
+
+    public const PAYROLL_KEY = 'overtime_request_id';
 
     public const STATUS_PENDING = 'pending';
 
@@ -43,33 +52,9 @@ class OvertimeRequest extends Model
     /**
      * @return BelongsTo<User, $this>
      */
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'employee_id');
-    }
-
-    /**
-     * @return BelongsTo<Client, $this>
-     */
-    public function client(): BelongsTo
-    {
-        return $this->belongsTo(Client::class);
-    }
-
-    /**
-     * @return BelongsTo<User, $this>
-     */
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
-    }
-
-    /**
-     * @return BelongsTo<Payroll, $this>
-     */
-    public function payroll(): BelongsTo
-    {
-        return $this->belongsTo(Payroll::class);
     }
 
     #[Scope]

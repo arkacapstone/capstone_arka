@@ -3,6 +3,7 @@
 namespace App\Services\Settings;
 
 use App\Enums\EmploymentType;
+use App\Models\HomeOffice;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -21,8 +22,12 @@ class SystemRules
 
     private const SYSTEM = 'system_settings';
 
-    /** @var array<string, mixed>|null */
-    private ?array $values = null;
+    /**
+     * Values already read, per home office (scheduled commands go through several).
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    private array $values = [];
 
     /**
      * @return array<string, array{table: string, group: string, label: string, type: string, default: mixed, description: string, min?: int|float, max?: int|float}>
@@ -53,8 +58,8 @@ class SystemRules
             'second_cutoff_day' => ['table' => self::PAYROLL, 'group' => 'cutoff', 'label' => 'Second cutoff day', 'type' => 'integer', 'default' => 25, 'min' => 2, 'max' => 31, 'description' => 'The second half of the month ends on this day.'],
             'second_release_day' => ['table' => self::PAYROLL, 'group' => 'cutoff', 'label' => 'Second release day', 'type' => 'integer', 'default' => 30, 'min' => 1, 'max' => 31, 'description' => 'Salary for the second half is released on this day (or the month\'s last day).'],
 
-            // Basic system configuration
-            'organization_name' => ['table' => self::SYSTEM, 'group' => 'system', 'label' => 'Organization name', 'type' => 'string', 'default' => 'Makarius Virtual Solutions', 'description' => 'Printed on payslips and reports.'],
+            // Home Offices: the organization name is the home office's name (home_offices.name),
+            // edited on System & Rules by RuleController. It is not stored as a setting.
 
             // Notification settings (Blueprint §16: the Super Admin manages system-wide notification settings)
             'devotional_reminders_enabled' => ['table' => self::SYSTEM, 'group' => 'notifications', 'label' => 'Evening devotional reminder', 'type' => 'boolean', 'default' => true, 'description' => 'A quiet reminder to anyone who has not uploaded today\'s devotional.'],
@@ -109,15 +114,17 @@ class SystemRules
      */
     public function all(): array
     {
-        if ($this->values !== null) {
-            return $this->values;
+        $homeOfficeId = HomeOffice::currentId();
+
+        if (isset($this->values[$homeOfficeId])) {
+            return $this->values[$homeOfficeId];
         }
 
         $saved = [];
 
         foreach ([self::PAYROLL => ['rule_key', 'rule_value'], self::SYSTEM => ['setting_key', 'setting_value']] as $table => [$key, $value]) {
             if (Schema::hasTable($table)) {
-                $saved += DB::table($table)->pluck($value, $key)->all();
+                $saved += DB::table($table)->where('home_office_id', $homeOfficeId)->pluck($value, $key)->all();
             }
         }
 
@@ -127,7 +134,7 @@ class SystemRules
             $values[$name] = array_key_exists($name, $saved) ? $this->cast($saved[$name], $definition['type']) : $definition['default'];
         }
 
-        return $this->values = $values;
+        return $this->values[$homeOfficeId] = $values;
     }
 
     /**
@@ -152,11 +159,11 @@ class SystemRules
 
             [$key, $column] = $definition['table'] === self::PAYROLL ? ['rule_key', 'rule_value'] : ['setting_key', 'setting_value'];
 
-            DB::table($definition['table'])->updateOrInsert([$key => $name], [
+            // Who changed it is read from the activity log, so no updated_by column.
+            DB::table($definition['table'])->updateOrInsert(['home_office_id' => $by->home_office_id, $key => $name], [
                 $column => $this->store($value, $definition['type']),
                 'data_type' => $definition['type'] === 'time' ? 'string' : $definition['type'],
                 'description' => $definition['label'],
-                'updated_by' => $by->id,
                 'updated_at' => now(),
                 'created_at' => now(),
             ]);
@@ -164,7 +171,7 @@ class SystemRules
             $changed[] = $definition['label'];
         }
 
-        $this->values = null;
+        $this->values = [];
 
         return $changed;
     }

@@ -34,7 +34,7 @@ class ManageClientAssignmentRequest
         $name = trim(preg_replace('/\s+/', ' ', $details['client_name']));
         $client = Client::named($name);
 
-        if ($client && $contractor->currentRates()->where('client_id', $client->id)->exists()) {
+        if ($client && $contractor->currentRates()->forClient($client->id)->exists()) {
             throw ValidationException::withMessages(['client_name' => "{$contractor->name} already works for {$client->client_name}."]);
         }
 
@@ -44,10 +44,11 @@ class ManageClientAssignmentRequest
 
         $request = ClientAssignmentRequest::create([
             'employee_id' => $contractor->id,
+            // Either an existing client, or the name (and break allowance) of a new one, never both.
             'client_id' => $client?->id,
-            'client_name' => $client?->client_name ?? $name,
+            'client_name' => $client ? null : $name,
             'employment_type' => $details['employment_type'],
-            'break_allowance_minutes' => $details['break_allowance_minutes'] ?? Client::DEFAULT_BREAK_ALLOWANCE,
+            'break_allowance_minutes' => $client ? null : ($details['break_allowance_minutes'] ?? Client::DEFAULT_BREAK_ALLOWANCE),
             'start_date' => $details['start_date'],
             'requested_by' => $admin->id,
             'status' => ClientAssignmentRequest::STATUS_PENDING,
@@ -69,8 +70,7 @@ class ManageClientAssignmentRequest
 
         DB::transaction(function () use ($superAdmin, $request, $terms) {
             $client = $this->resolveClient($request);
-            // The break allowance follows the client: it applies to everyone on it, Full-Time or Part-Time.
-            $client->update(['break_allowance_minutes' => $request->break_allowance_minutes]);
+            // A new client is created with the break allowance the Admin gave (see resolveClient()).
 
             $rate = $this->assignClientRate->handle($request->employee, [
                 ...$terms,
@@ -83,7 +83,9 @@ class ManageClientAssignmentRequest
                 'status' => ClientAssignmentRequest::STATUS_APPROVED,
                 'reviewed_by' => $superAdmin->id,
                 'reviewed_at' => now(),
-                'rate_id' => $rate->id,
+                // Once it points to a client, the typed name and break allowance are not kept.
+                'client_name' => null,
+                'break_allowance_minutes' => null,
             ]);
         });
 
@@ -112,7 +114,7 @@ class ManageClientAssignmentRequest
         $this->ensurePending($request);
 
         $request->update(['status' => ClientAssignmentRequest::STATUS_CANCELLED]);
-        $request->loadMissing('employee:id,name', 'client:id,client_name');
+        $request->loadMissing('employee:users.id,name', 'client:clients.id,client_name');
         $this->activity->log('scheduling', 'Withdrew client assignment request', $request, "{$request->employee->name} → {$request->clientName()}");
 
         return $request;
@@ -126,8 +128,12 @@ class ManageClientAssignmentRequest
         $client = $request->client ?? Client::named((string) $request->client_name);
 
         if ($client === null) {
-            $client = Client::create(['client_name' => $request->client_name, 'client_code' => Client::nextCode(), 'is_active' => true]);
-            $this->activity->log('workforce', 'Created client', $client, "{$client->client_name} ({$client->client_code})");
+            $client = Client::create([
+                'client_name' => $request->client_name,
+                'break_allowance_minutes' => $request->break_allowance_minutes ?? Client::DEFAULT_BREAK_ALLOWANCE,
+                'is_active' => true,
+            ]);
+            $this->activity->log('workforce', 'Created client', $client, $client->client_name);
         } elseif (! $client->is_active) {
             $client->update(['is_active' => true]);
         }
@@ -138,7 +144,7 @@ class ManageClientAssignmentRequest
     private function waiting(User $contractor, ?Client $client, string $name): bool
     {
         return ClientAssignmentRequest::query()->pending()
-            ->where('employee_id', $contractor->id)
+            ->where('contractor_id', $contractor->id)
             ->where(fn ($query) => $client
                 ? $query->where('client_id', $client->id)->orWhereRaw('LOWER(client_name) = ?', [mb_strtolower($name)])
                 : $query->whereRaw('LOWER(client_name) = ?', [mb_strtolower($name)]))
@@ -154,7 +160,7 @@ class ManageClientAssignmentRequest
 
     private function decided(ClientAssignmentRequest $request, string $action): ClientAssignmentRequest
     {
-        $request->loadMissing('employee:id,name', 'client:id,client_name', 'requester');
+        $request->loadMissing('employee:users.id,name', 'client:clients.id,client_name', 'requester');
         $this->activity->log('requests', $action, $request, "{$request->employee->name} → {$request->clientName()}");
         $request->requester->notify(new ClientAssignmentDecided($request));
 

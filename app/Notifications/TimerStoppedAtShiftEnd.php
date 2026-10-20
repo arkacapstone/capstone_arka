@@ -18,7 +18,7 @@ class TimerStoppedAtShiftEnd extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->log->loadMissing('client:id,client_name');
+        $this->log->loadMissing('client:clients.id,client_name');
 
         return "Your {$this->log->client->client_name} timer stopped at {$this->log->time_out->format('g:i A')}, when your shift ended. Worked overtime approved by your client handler? File an overtime ticket.";
     }

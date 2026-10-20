@@ -4,6 +4,7 @@ namespace App\Http\Requests\SuperAdmin;
 
 use App\Enums\PayFrequency;
 use App\Models\Client;
+use App\Models\HomeOffice;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,7 @@ class RateRequest extends FormRequest
 
         return [
             'client_id' => $assigning
-                ? ['required', 'integer', Rule::exists(Client::class, 'id')->where('is_active', true)]
+                ? ['required', 'integer', Rule::exists(Client::class, 'id')->where('home_office_id', HomeOffice::currentId())->where('is_active', true)]
                 : ['prohibited'],
             'gross_pay' => ['required', 'numeric', 'min:1', 'max:9999999'],
             'pay_frequency' => ['required', Rule::enum(PayFrequency::class)],

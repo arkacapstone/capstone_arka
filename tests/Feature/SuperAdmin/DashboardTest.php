@@ -3,15 +3,20 @@
 namespace Tests\Feature\SuperAdmin;
 
 use App\Enums\AttendanceStatus;
+use App\Enums\CashAdvanceStatus;
 use App\Enums\PayrollPeriodStatus;
 use App\Models\Attendance;
 use App\Models\CashAdvance;
+use App\Models\CashAdvanceRepayment;
 use App\Models\Client;
 use App\Models\LeaveRequest;
+use App\Models\OvertimeRequest;
 use App\Models\Payroll;
+use App\Models\PayrollOvertime;
 use App\Models\PayrollPeriod;
 use App\Models\TimeLog;
 use App\Models\User;
+use App\Services\Settings\MailSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -65,9 +70,10 @@ class DashboardTest extends TestCase
                 // Nothing is saved yet, so the Super Admin still has to open verification (step 1).
                 ->where('payroll.steps.0.state', 'current')
                 ->where('payroll.action.label', 'Open attendance verification')
-                ->has('navigation', 11)
+                ->has('navigation', 12)
                 ->where('navigation.1.key', 'workforce')
                 ->where('navigation.9.key', 'notifications')
+                ->where('navigation.10.key', 'community')
             );
     }
 
@@ -75,7 +81,13 @@ class DashboardTest extends TestCase
     {
         $period = PayrollPeriod::factory()->create(['status' => PayrollPeriodStatus::Locked]);
         Payroll::factory()->for($period, 'period')->create();
-        Payroll::factory()->for($period, 'period')->reviewed()->create(['overtime_amount' => 500, 'cash_advance_deduction' => 1000, 'net_pay' => 18875]);
+        $row = Payroll::factory()->for($period, 'period')->reviewed()->create();
+
+        // Overtime and cash advance repayments are not stored on payroll: they are linked to the row.
+        $ticket = OvertimeRequest::query()->create(['assignment_id' => $row->assignment_id, 'date' => '2026-09-15', 'minutes' => 240, 'client_handler' => 'Handler', 'reason' => 'Extra time', 'status' => OvertimeRequest::STATUS_APPROVED, 'amount' => 500]);
+        PayrollOvertime::query()->create(['overtime_request_id' => $ticket->id, 'payroll_id' => $row->id]);
+        $advance = CashAdvance::factory()->create(['contractor_id' => $row->assignment->contractor_id, 'amount' => 1000, 'status' => CashAdvanceStatus::Approved]);
+        CashAdvanceRepayment::query()->create(['advance_id' => $advance->id, 'payroll_id' => $row->id, 'amount' => 1000, 'repayment_date' => '2026-09-30']);
 
         $this->actingAs(User::factory()->superAdmin()->create())
             ->get(route('super-admin.dashboard'))
@@ -177,5 +189,20 @@ class DashboardTest extends TestCase
             ->get(route('super-admin.requests'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('SuperAdmin/Requests/Index'));
+    }
+
+    public function test_the_dashboard_reminds_the_super_admin_to_set_up_gmail_until_it_is_saved(): void
+    {
+        $superAdmin = User::factory()->superAdmin()->create();
+
+        $this->actingAs($superAdmin)
+            ->get(route('super-admin.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('mailConfigured', false));
+
+        app(MailSettings::class)->save('makarius@gmail.com', 'abcdabcdabcdabcd', 'Makarius', $superAdmin);
+
+        $this->actingAs($superAdmin)
+            ->get(route('super-admin.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('mailConfigured', true));
     }
 }

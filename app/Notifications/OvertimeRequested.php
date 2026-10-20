@@ -18,7 +18,7 @@ class OvertimeRequested extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->ticket->loadMissing('employee:id,name', 'client:id,client_name');
+        $this->ticket->loadMissing('employee:users.id,name', 'client:clients.id,client_name');
 
         return "{$this->ticket->employee->name} filed {$this->ticket->duration()} h of overtime for {$this->ticket->client->client_name} on {$this->ticket->date->format('M j')}, approved by {$this->ticket->client_handler}.";
     }

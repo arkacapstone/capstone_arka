@@ -16,6 +16,10 @@
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
+        <!-- Favicon: the ARKA logo -->
+        <link rel="icon" type="image/png" href="/images/arka-mark.png">
+        <link rel="apple-touch-icon" href="/images/arka-mark.png">
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700|fraunces:400|barlow:400,500,600|barlow-condensed:500,600,700|jetbrains-mono:400,500,700&display=swap" rel="stylesheet" />

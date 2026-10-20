@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientAssignmentRequest;
+use App\Models\HomeOffice;
 use App\Models\Rate;
 use App\Models\Schedule;
 use App\Models\User;
@@ -37,29 +38,30 @@ class ClientAssignmentController extends Controller
         $scheduled = Schedule::query()
             ->active()
             ->where(fn (Builder $query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
-            ->get(['employee_id', 'client_id'])
-            ->countBy(fn (Schedule $schedule) => "{$schedule->employee_id}-{$schedule->client_id}");
+            ->get(['assignment_id'])
+            ->countBy('assignment_id');
 
         $assignments = Rate::query()
             ->current()
-            ->with(['employee:id,name,employee_code,employment_type', 'client:id,client_name,client_code'])
+            ->with(['assignment', 'employee:users.id,name,employee_code', 'client:clients.id,client_name'])
             ->whereHas('employee', fn (Builder $query) => $query
                 ->whereIn('role', UserRole::workforceValues())
                 ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->where(
                     fn (Builder $query) => $query->where('name', 'like', "%{$search}%")->orWhere('employee_code', 'like', "%{$search}%")
                 )))
-            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->where('client_id', $client))
-            ->join('users', 'users.id', '=', 'rates.employee_id')
+            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->forClient($client))
+            ->join('client_assignments', 'client_assignments.id', '=', 'rates.assignment_id')
+            ->join('users', 'users.id', '=', 'client_assignments.contractor_id')
             ->orderBy('users.name')
             ->select('rates.*')
             ->get()
             ->map(fn (Rate $rate) => [
                 'id' => $rate->id,
                 'contractor' => ['id' => $rate->employee->id, 'name' => $rate->employee->name, 'code' => $rate->employee->employee_code, 'type' => $rate->employee->employment_type?->label()],
-                'client' => ['id' => $rate->client->id, 'name' => $rate->client->client_name, 'code' => $rate->client->client_code],
+                'client' => ['id' => $rate->client->id, 'name' => $rate->client->client_name, 'code' => null],
                 'type' => $rate->employment_type?->label(),
                 'since' => $rate->effective_date->toDateString(),
-                'schedules' => $scheduled->get("{$rate->employee_id}-{$rate->client_id}", 0),
+                'schedules' => $scheduled->get($rate->assignment_id, 0),
             ]);
 
         return Inertia::render('Admin/Scheduling/Clients', [
@@ -85,7 +87,7 @@ class ClientAssignmentController extends Controller
     public function store(Request $request, ManageClientAssignmentRequest $manage): RedirectResponse
     {
         $validated = $request->validate([
-            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
+            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'client_name' => ['required', 'string', 'min:2', 'max:100'],
             'employment_type' => ['required', Rule::enum(EmploymentType::class)],
             'break_allowance_minutes' => ['required', 'integer', 'min:0', 'max:240'],
@@ -112,7 +114,7 @@ class ClientAssignmentController extends Controller
     private function requests(): array
     {
         return ClientAssignmentRequest::query()
-            ->with(['employee:id,name,employee_code', 'client:id,client_name', 'requester:id,name', 'reviewer:id,name'])
+            ->with(['employee:users.id,name,employee_code', 'client:clients.id,client_name', 'requester:id,name', 'reviewer:id,name'])
             ->where(fn (Builder $query) => $query
                 ->where('status', ClientAssignmentRequest::STATUS_PENDING)
                 ->orWhere(fn (Builder $query) => $query
@@ -146,12 +148,12 @@ class ClientAssignmentController extends Controller
     {
         $taken = [];
 
-        foreach (Rate::query()->current()->with('client:id,client_name')->get(['employee_id', 'client_id']) as $rate) {
+        foreach (Rate::query()->current()->with(['assignment', 'client:clients.id,client_name'])->get() as $rate) {
             $taken[$rate->employee_id][] = mb_strtolower($rate->client->client_name);
         }
 
-        foreach (ClientAssignmentRequest::query()->pending()->with('client:id,client_name')->get(['employee_id', 'client_id', 'client_name']) as $request) {
-            $taken[$request->employee_id][] = mb_strtolower($request->clientName());
+        foreach (ClientAssignmentRequest::query()->pending()->with('client:clients.id,client_name')->get(['contractor_id', 'client_id', 'client_name']) as $request) {
+            $taken[$request->contractor_id][] = mb_strtolower($request->clientName());
         }
 
         return $taken;

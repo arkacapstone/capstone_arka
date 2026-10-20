@@ -34,6 +34,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::Admin->value, 'view:adm
             Route::put('{account}', 'update')->name('update');
             Route::patch('{account}/status', 'updateStatus')->name('status');
             Route::post('{account}/invitation', 'resendInvitation')->name('invitation');
+            Route::post('{account}/password-reset', 'resetPassword')->middleware('throttle:6,1')->name('password-reset');
         });
 
         // Scheduling has two tabs: Clients (given here, approved by the Super Admin) and Schedules.

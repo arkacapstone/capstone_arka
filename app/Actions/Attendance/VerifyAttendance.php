@@ -40,7 +40,7 @@ class VerifyAttendance
             ->where('status', PayrollPeriodStatus::Verification)
             ->orderBy('start_date')
             ->get()
-            ->first(fn (PayrollPeriod $period) => PayrollCalculator::ratesFor($period)->where('employee_id', $contractor->id)->exists());
+            ->first(fn (PayrollPeriod $period) => PayrollCalculator::ratesFor($period)->forEmployee($contractor->id)->exists());
     }
 
     public function fix(User $contractor, PayrollPeriod $period, Attendance $attendance, ?string $timeIn, ?string $timeOut, string $reason): AttendanceCorrection
@@ -107,7 +107,7 @@ class VerifyAttendance
      */
     private function openVerification(User $contractor, PayrollPeriod $period): AttendanceVerification
     {
-        if ($period->status !== PayrollPeriodStatus::Verification || ! PayrollCalculator::ratesFor($period)->where('employee_id', $contractor->id)->exists()) {
+        if ($period->status !== PayrollPeriodStatus::Verification || ! PayrollCalculator::ratesFor($period)->forEmployee($contractor->id)->exists()) {
             throw ValidationException::withMessages(['time_in' => 'Attendance verification is not open for this period.']);
         }
 
@@ -115,7 +115,7 @@ class VerifyAttendance
             throw ValidationException::withMessages(['time_in' => 'An Admin already submitted this period to the Super Admin, so it can no longer be changed.']);
         }
 
-        $verification = AttendanceVerification::query()->firstOrCreate(['period_id' => $period->id, 'employee_id' => $contractor->id]);
+        $verification = AttendanceVerification::query()->firstOrCreate(['period_id' => $period->id, 'contractor_id' => $contractor->id]);
 
         if ($verification->verified_at !== null) {
             throw ValidationException::withMessages(['time_in' => 'You already submitted your attendance as verified.']);

@@ -10,6 +10,8 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
+use App\Models\ClientAssignment;
+use App\Models\HomeOffice;
 use App\Models\User;
 use App\Services\Attendance\AttendanceLock;
 use App\Support\Paginated;
@@ -44,23 +46,23 @@ class AttendanceController extends Controller
         $range = Attendance::query()
             ->whereDate('date', '>=', $from)
             ->whereDate('date', '<=', $to)
-            ->when($filters['employee'] ?? null, fn (Builder $query, int $id) => $query->where('employee_id', $id));
+            ->when($filters['employee'] ?? null, fn (Builder $query, int $id) => $query->forEmployee($id));
 
         $counts = (clone $range)->selectRaw('status, count(*) as total')->groupBy('status')->toBase()->pluck('total', 'status');
         $count = fn (AttendanceStatus ...$statuses) => (int) collect($statuses)->sum(fn ($status) => $counts[$status->value] ?? 0);
 
         $records = (clone $range)
             ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
-            ->with(['employee:id,name,employee_code', 'client:id,client_name', 'schedule', 'leaveType:id,leave_type_name'])
-            ->withCount('corrections')
+            ->with(['employee:users.id,name,employee_code', 'client:clients.id,client_name', 'assignmentTimeLogs', 'leaveRequest.leaveType:id,leave_type_name'])
+            ->withCorrectionCount()
             ->orderByDesc('date')
-            ->orderBy('employee_id')
+            ->orderBy('assignment_id')
             ->orderBy('id')
             ->paginate(15)
             ->withQueryString()
             ->through(fn (Attendance $attendance) => $this->present($attendance, $lock));
 
-        $fix = isset($filters['fix']) ? Attendance::with(['employee:id,name,employee_code', 'client:id,client_name', 'schedule'])->find($filters['fix']) : null;
+        $fix = isset($filters['fix']) ? Attendance::with(['employee:users.id,name,employee_code', 'client:clients.id,client_name', 'assignmentTimeLogs'])->find($filters['fix']) : null;
 
         return Inertia::render('Admin/Attendance/Index', [
             'filters' => [
@@ -80,7 +82,7 @@ class AttendanceController extends Controller
             'records' => Paginated::from($records),
             'log' => AttendanceCorrection::query()
                 ->where('status', '!=', CorrectionStatus::Pending)
-                ->with(['employee:id,name', 'reviewer:id,name'])
+                ->with(['employee:users.id,name', 'reviewer:id,name'])
                 ->orderByDesc('reviewed_at')
                 ->orderByDesc('id')
                 ->limit(50)
@@ -98,8 +100,8 @@ class AttendanceController extends Controller
     public function correct(Request $request, CorrectAttendance $correctAttendance): RedirectResponse
     {
         $validated = $request->validate([
-            'attendance_id' => ['nullable', 'integer', Rule::exists(Attendance::class, 'id')],
-            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues()), Rule::notIn([$request->user()->id])],
+            'attendance_id' => ['nullable', 'integer', Rule::exists(Attendance::class, 'id')->where(fn ($query) => $query->whereIn('assignment_id', ClientAssignment::query()->select('id')))],
+            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues()), Rule::notIn([$request->user()->id])],
             'date' => ['required', 'date', 'before_or_equal:today'],
             'time_in' => ['nullable', 'required_without:time_out', 'date_format:H:i'],
             'time_out' => ['nullable', 'required_without:time_in', 'date_format:H:i'],

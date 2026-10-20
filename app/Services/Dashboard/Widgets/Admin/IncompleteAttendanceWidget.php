@@ -35,7 +35,7 @@ class IncompleteAttendanceWidget implements DashboardWidget
         return [
             'total' => (clone $query)->count(),
             'items' => $query
-                ->with(['employee:id,name,employee_code', 'client:id,client_name'])
+                ->with(['employee:users.id,name,employee_code', 'client:clients.id,client_name'])
                 ->orderByDesc('date')
                 ->orderByDesc('id')
                 ->limit(self::LIMIT)

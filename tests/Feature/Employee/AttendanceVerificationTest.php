@@ -178,8 +178,9 @@ class AttendanceVerificationTest extends TestCase
 
     public function test_time_history_groups_sessions_by_day_with_the_fixes(): void
     {
+        // The attendance's time in is the day's first session (still open); one more session was finished.
         $day = $this->attendance('2026-09-15');
-        TimeLog::factory()->for($this->contractor, 'employee')->for($this->client)->count(2)->create(['date' => '2026-09-15', 'time_in' => '2026-09-15 09:00:00', 'time_out' => '2026-09-15 12:00:00']);
+        TimeLog::factory()->for($this->contractor, 'employee')->for($this->client)->create(['date' => '2026-09-15', 'time_in' => '2026-09-15 13:00:00', 'time_out' => '2026-09-15 14:00:00']);
         TimeLog::factory()->for($this->contractor, 'employee')->for($this->client)->create(['date' => '2026-09-16', 'time_in' => '2026-09-16 09:00:00', 'time_out' => '2026-09-16 12:00:00']);
 
         $this->actingAs($this->contractor)->post(route('employee.attendance.verification.fix', $this->period), [

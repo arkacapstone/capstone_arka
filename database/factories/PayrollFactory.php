@@ -8,6 +8,7 @@ use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\Rate;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class PayrollFactory extends Factory
 {
+    use ForAssignment;
+
     protected $model = Payroll::class;
 
     /**
@@ -34,15 +37,12 @@ class PayrollFactory extends Factory
                 'client_id' => $attributes['client_id'],
             ]),
             'gross_pay' => 20000,
-            'hourly_rate' => 125,
-            'daily_rate' => 1000,
-            'additional_hours' => 5,
+            'additional_minutes' => 300,
             'additional_pay' => 625,
             'days_absent' => 1,
             'absence_deduction' => 1000,
-            'late_hours' => 2,
+            'late_minutes' => 120,
             'late_deduction' => 250,
-            'net_pay' => 19375,
             'status' => PayrollStatus::Draft,
         ];
     }

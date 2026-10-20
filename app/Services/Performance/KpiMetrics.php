@@ -27,7 +27,7 @@ class KpiMetrics
 
         // One outcome per day, even when the contractor serves several clients.
         $byDay = Attendance::query()
-            ->where('employee_id', $employee->id)
+            ->forEmployee($employee->id)
             ->whereDate('date', '>=', $from)
             ->whereDate('date', '<=', $to)
             ->get()

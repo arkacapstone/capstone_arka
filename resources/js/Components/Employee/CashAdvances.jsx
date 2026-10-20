@@ -1,5 +1,5 @@
 import Dialog from '@/Components/Console/Dialog';
-import Field, { ConsoleButton, TextAreaField } from '@/Components/Console/Field';
+import Field, { ConsoleButton, SelectField, TextAreaField } from '@/Components/Console/Field';
 import Panel, { PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
 import { PlusIcon } from '@/Components/Icons';
@@ -13,7 +13,7 @@ const statusTone = { approved: 'running', repaid: 'completed' };
 /** The contractor's own cash advances: request one, follow the decision and the balance (Blueprint §13). */
 export default function CashAdvances({ advances, requestWindow }) {
     const [open, setOpen] = useState(false);
-    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({ amount: '', reason: '' });
+    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({ amount: '', repayment_months: '2', reason: '' });
     const outstanding = advances.filter((advance) => advance.status === 'approved').reduce((total, advance) => total + advance.remaining, 0);
 
     const close = () => {
@@ -31,7 +31,7 @@ export default function CashAdvances({ advances, requestWindow }) {
         <Panel>
             <PanelHeading
                 title="Cash advances"
-                subtitle={`You can ask once a month, any day before payday, for up to your gross pay for that pay period. Once the Super Admin approves, you get it right away, and the full amount is deducted from that payday's payslip.`}
+                subtitle={`You can ask once a month, any day before payday, for up to your gross pay for that pay period. Once the Super Admin approves, you get it right away, and it is repaid in installments over 2 or 3 months, starting on that payday.`}
                 action={
                     <ConsoleButton onClick={() => setOpen(true)} disabled={!requestWindow.open} title={requestWindow.reason ?? undefined}>
                         <PlusIcon className="h-4 w-4" /> Request cash advance
@@ -63,7 +63,8 @@ export default function CashAdvances({ advances, requestWindow }) {
                             <Cell className="font-mono">
                                 {peso(advance.amount)}
                                 {advance.requestedAmount !== advance.amount && <p className="text-xs text-console-dim">asked {peso(advance.requestedAmount)}</p>}
-                                {advance.payday && <p className="text-xs text-console-dim">payday {fullDate(advance.payday)}</p>}
+                                {advance.payday && <p className="text-xs text-console-dim">from payday {fullDate(advance.payday)}</p>}
+                                {advance.repaymentMonths && <p className="text-xs text-console-dim">over {advance.repaymentMonths} months</p>}
                             </Cell>
                             <Cell className="font-mono">{advance.releasedDate ? peso(advance.remaining) : '—'}</Cell>
                             <Cell className="max-w-xs text-console-muted">{advance.reason}</Cell>
@@ -93,7 +94,7 @@ export default function CashAdvances({ advances, requestWindow }) {
                 onClose={close}
                 side
                 title="Request a cash advance"
-                description={`Up to ${peso(requestWindow.limit)}. The full amount is deducted from your payslip on ${requestWindow.payday ? fullDate(requestWindow.payday) : 'payday'}. The Super Admin decides how much to release and you'll be notified.`}
+                description={`Up to ${peso(requestWindow.limit)}. It is repaid in equal installments from your payslips, starting on ${requestWindow.payday ? fullDate(requestWindow.payday) : 'payday'}. The Super Admin decides how much to release and you'll be notified.`}
             >
                 <form onSubmit={submit} className="flex flex-col gap-5">
                     <Field
@@ -107,6 +108,17 @@ export default function CashAdvances({ advances, requestWindow }) {
                         onChange={(e) => setData('amount', e.target.value)}
                         error={errors.amount}
                         required
+                    />
+                    <SelectField
+                        id="repayment_months"
+                        label="Repay over"
+                        value={data.repayment_months}
+                        onChange={(e) => setData('repayment_months', e.target.value)}
+                        options={[
+                            { value: '2', label: '2 months' },
+                            { value: '3', label: '3 months' },
+                        ]}
+                        error={errors.repayment_months}
                     />
                     <TextAreaField id="reason" label="Reason" value={data.reason} onChange={(e) => setData('reason', e.target.value)} error={errors.reason} required />
                     <ConsoleButton type="submit" disabled={processing}>

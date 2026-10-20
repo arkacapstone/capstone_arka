@@ -3,6 +3,8 @@
 namespace App\Actions\Workforce;
 
 use App\Models\Client;
+use App\Models\ClientAssignment;
+use App\Models\Contractor;
 use App\Models\Rate;
 use App\Models\User;
 use App\Notifications\ClientAssigned;
@@ -25,7 +27,7 @@ class AssignClientRate
      */
     public function handle(User $employee, array $terms): Rate
     {
-        $alreadyAssigned = $employee->currentRates()->where('client_id', $terms['client_id'])->exists();
+        $alreadyAssigned = $employee->currentRates()->forClient($terms['client_id'])->exists();
 
         if ($alreadyAssigned) {
             throw ValidationException::withMessages([
@@ -33,8 +35,18 @@ class AssignClientRate
             ]);
         }
 
-        $rate = $employee->rates()->create($terms);
+        // Working for this client starts a client assignment (from the rate's effective date); the rate belongs to it.
+        Contractor::ensureFor($employee->id);
+        $assignment = ClientAssignment::query()->open()->where('contractor_id', $employee->id)->where('client_id', $terms['client_id'])->first()
+            ?? ClientAssignment::query()->create([
+                'contractor_id' => $employee->id,
+                'client_id' => $terms['client_id'],
+                'start_date' => $terms['effective_date'],
+            ]);
+
         $client = Client::find($terms['client_id']);
+        unset($terms['client_id']);
+        $rate = Rate::query()->create([...$terms, 'assignment_id' => $assignment->id]);
 
         $this->activity->log('workforce', 'Assigned client rate', $rate, "{$employee->name} → {$client->client_name}");
         $employee->notify(new ClientAssigned($rate));

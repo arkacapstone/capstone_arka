@@ -38,22 +38,23 @@ class ScheduleController extends Controller
         $status = $filters['status'] ?? 'current';
 
         $schedules = Schedule::query()
-            ->with(['employee:id,name,employee_code', 'client:id,client_name,break_allowance_minutes'])
+            ->with(['employee:users.id,name,employee_code', 'client:clients.id,client_name,break_allowance_minutes', 'days'])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->where(
                 fn (Builder $query) => $query
                     ->whereHas('employee', fn (Builder $query) => $query
                         ->where('name', 'like', "%{$search}%")
                         ->orWhere('employee_code', 'like', "%{$search}%"))
             ))
-            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->where('schedules.client_id', $client))
-            ->when($filters['day'] ?? null, fn (Builder $query, string $day) => $query->where('schedules.working_days', 'like', "%\"{$day}\"%"))
+            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->forClient($client))
+            ->when($filters['day'] ?? null, fn (Builder $query, string $day) => $query->onWeekday($day))
             ->when($status === 'ended', fn (Builder $query) => $query->whereDate('schedules.end_date', '<', $today))
             ->when($status !== 'ended', fn (Builder $query) => $query->where(
                 fn (Builder $query) => $query->whereNull('schedules.end_date')->orWhereDate('schedules.end_date', '>=', $today)
             ))
             ->when(in_array($status, ['active', 'inactive'], true), fn (Builder $query) => $query->where('schedules.status', $status))
             // Joined only to sort by name; every filter above names the schedules table, since users has a status too.
-            ->join('users', 'users.id', '=', 'schedules.employee_id')
+            ->join('client_assignments', 'client_assignments.id', '=', 'schedules.assignment_id')
+            ->join('users', 'users.id', '=', 'client_assignments.contractor_id')
             ->orderBy('users.name')
             ->orderBy('schedules.start_time')
             ->orderBy('schedules.id')
@@ -116,9 +117,9 @@ class ScheduleController extends Controller
         return User::query()
             ->workforce()
             ->active()
-            ->with('currentRates:id,employee_id,client_id,employment_type')
+            ->with(['currentRates.assignment', 'assignments'])
             ->orderBy('name')
-            ->get(['id', 'name', 'employee_code', 'employment_type'])
+            ->get(['id', 'name', 'employee_code'])
             ->map(fn (User $employee) => [
                 'value' => $employee->id,
                 'label' => "{$employee->name} ({$employee->employee_code})",

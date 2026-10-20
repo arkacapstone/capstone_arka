@@ -7,6 +7,7 @@ use App\Services\Settings\SystemRules;
 use Illuminate\Mail\MailManager;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Fortify\Features;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +25,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->afterResolving('mail.manager', function (MailManager $manager) {
             $this->app->make(MailSettings::class)->apply($manager);
         });
+
+        // No reset-by-link pages: a forgotten password is replaced with a new default password
+        // (by the Admin, or by the Super Admin from "Forgot your password?"). Fortify's own sign-up
+        // is off too: "Register your home office" is RegisteredUserController (routes/auth.php).
+        // Set here, before Fortify registers its routes.
+        config(['fortify.features' => array_values(array_diff(config('fortify.features', []), [Features::resetPasswords(), Features::registration()]))]);
     }
 
     /**

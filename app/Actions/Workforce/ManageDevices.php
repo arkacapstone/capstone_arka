@@ -106,7 +106,7 @@ class ManageDevices
 
     private function currentAssignment(Device $device): DeviceAssignment
     {
-        return $device->currentAssignment()->with('employee:id,name')->first()
+        return $device->currentAssignment()->with('employee:users.id,name')->first()
             ?? throw ValidationException::withMessages(['device' => 'This device is not assigned to anyone.']);
     }
 

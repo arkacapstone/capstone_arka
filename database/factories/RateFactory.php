@@ -6,6 +6,7 @@ use App\Enums\PayFrequency;
 use App\Models\Client;
 use App\Models\Rate;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class RateFactory extends Factory
 {
+    use ForAssignment;
+
     /**
      * @return array<string, mixed>
      */

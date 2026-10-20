@@ -18,9 +18,10 @@ class CashAdvanceFactory extends Factory
     public function definition(): array
     {
         return [
-            'employee_id' => User::factory(),
+            // contractor_id is the user's id; employee_id is another name for it.
+            'contractor_id' => fn (array $attributes) => $attributes['employee_id'] ?? User::factory(),
             'amount' => 3000,
-            'remaining_balance' => 3000,
+            'repayment_months' => 2,
             'reason' => fake()->sentence(),
             'status' => CashAdvanceStatus::Pending,
         ];

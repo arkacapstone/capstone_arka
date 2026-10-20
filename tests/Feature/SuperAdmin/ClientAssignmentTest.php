@@ -40,7 +40,7 @@ class ClientAssignmentTest extends TestCase
         $this->travelTo('2026-09-25 10:00:00');
         $this->superAdmin = User::factory()->superAdmin()->create();
         $this->admin = User::factory()->admin()->create();
-        $this->contractor = User::factory()->create(['employment_type' => null]);
+        $this->contractor = User::factory()->create();
     }
 
     /**
@@ -132,7 +132,6 @@ class ClientAssignmentTest extends TestCase
 
         $client = Client::query()->sole();
         $this->assertSame('Aurora Dental', $client->client_name);
-        $this->assertSame('CL-0001', $client->client_code);
         $this->assertTrue($client->is_active);
 
         $rate = $this->contractor->currentRates()->sole();
@@ -188,9 +187,10 @@ class ClientAssignmentTest extends TestCase
             ->get(route('admin.scheduling.clients.index'))
             ->assertInertia(fn (Assert $page) => $page->where('clientBreaks.northline', 45));
 
-        // Another contractor on Northline: the same client, so the same break for everyone on it.
+        // Another contractor on Northline: the same client keeps its break. A request for an existing
+        // client carries no break allowance (only a new client's request does).
         $this->approve($this->submit('Northline', 'full_time', User::factory()->create(), 20));
-        $this->assertSame(20, Client::named('Northline')->break_allowance_minutes);
+        $this->assertSame(45, Client::named('Northline')->break_allowance_minutes);
 
         $this->actingAs($this->admin)
             ->post(route('admin.scheduling.clients.store'), ['employee_id' => $this->contractor->id, 'client_name' => 'Harbor Vet', 'employment_type' => 'part_time', 'break_allowance_minutes' => 500, 'start_date' => '2026-09-28'])
@@ -244,7 +244,7 @@ class ClientAssignmentTest extends TestCase
         $this->assertCount(3, $this->contractor->currentRates);
 
         // Ending the Full-Time client leaves only Part-Time ones.
-        $fullTime = $this->contractor->currentRates()->where('employment_type', 'full_time')->sole();
+        $fullTime = $this->contractor->currentRates()->get()->sole(fn (Rate $rate) => $rate->employment_type === EmploymentType::FullTime);
         $this->actingAs($this->superAdmin)
             ->delete(route('super-admin.workforce.employees.rates.destroy', [$this->contractor, $fullTime]))
             ->assertSessionHasNoErrors();
@@ -270,8 +270,8 @@ class ClientAssignmentTest extends TestCase
         $this->actingAs($this->admin)->post(route('admin.scheduling.store'), $schedule($fullTime, '09:00'))->assertSessionHasNoErrors();
         $this->actingAs($this->admin)->post(route('admin.scheduling.store'), $schedule($partTime, '18:00'))->assertSessionHasNoErrors();
 
-        $this->assertSame('17:00:00', Schedule::query()->where('client_id', $fullTime->id)->sole()->end_time);
-        $this->assertSame('22:00:00', Schedule::query()->where('client_id', $partTime->id)->sole()->end_time);
+        $this->assertSame('17:00:00', Schedule::query()->forClient($fullTime->id)->sole()->end_time);
+        $this->assertSame('22:00:00', Schedule::query()->forClient($partTime->id)->sole()->end_time);
         $this->assertSame('Contractor', Schedule::query()->first()->job_position);
 
         // The hours come from System & Rules.
@@ -280,7 +280,7 @@ class ClientAssignmentTest extends TestCase
         $this->approve($this->submit('Northline', 'part_time', $other));
         $this->actingAs($this->admin)->post(route('admin.scheduling.store'), [...$schedule($partTime, '20:00'), 'employee_id' => $other->id])->assertSessionHasNoErrors();
 
-        $this->assertSame('01:00:00', Schedule::query()->where('employee_id', $other->id)->sole()->end_time);
+        $this->assertSame('01:00:00', Schedule::query()->forEmployee($other->id)->sole()->end_time);
     }
 
     public function test_rejecting_changes_nothing_and_tells_the_admin_why(): void

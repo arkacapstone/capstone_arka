@@ -32,7 +32,8 @@ class PayslipTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Employee/Payslips')
                 ->where('payslips.0.status', 'available')
-                ->where('payslips.0.net', 38750)
+                // Net pay is worked out from each row: gross + 625 additional − 1,000 absence − 250 late.
+                ->where('payslips.0.net', 35750)
                 // The client that pays the most is Gross Pay; every other client is Additional Pay.
                 ->where('payslips.0.earnings.0.label', fn (string $label) => str_starts_with($label, 'Gross Pay (Aurora Dental'))
                 ->where('payslips.0.earnings.1.label', fn (string $label) => str_starts_with($label, 'Additional Pay (Northline'))

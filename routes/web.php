@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\PasswordSetupController;
 use App\Http\Controllers\Auth\ProfileSetupController;
+use App\Http\Controllers\CommunityChatController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SuperAdmin\ActivityLogController;
@@ -57,6 +58,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
             Route::put('{account}', 'update')->name('update');
             Route::patch('{account}/status', 'updateStatus')->name('status');
             Route::post('{account}/invitation', 'resendInvitation')->name('invitation');
+            Route::post('{account}/password-reset', 'resetPassword')->middleware('throttle:6,1')->name('password-reset');
         });
 
         Route::prefix('workforce/employees')->name('workforce.employees.')->group(function () {
@@ -67,6 +69,7 @@ Route::middleware(['auth', 'verified', 'role:'.UserRole::SuperAdmin->value])
                 Route::put('{account}', 'update')->name('update');
                 Route::patch('{account}/status', 'updateStatus')->name('status');
                 Route::post('{account}/invitation', 'resendInvitation')->name('invitation');
+                Route::post('{account}/password-reset', 'resetPassword')->middleware('throttle:6,1')->name('password-reset');
             });
 
             Route::controller(EmployeeRateController::class)->name('rates.')->group(function () {
@@ -170,6 +173,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/notifications/feed', [NotificationController::class, 'feed'])->name('notifications.feed');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])->name('notifications.read');
+
+    // Community chat: one room per home office, for every role.
+    Route::middleware('verified')->prefix('community')->name('community.')->controller(CommunityChatController::class)->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/messages', 'store')->middleware('throttle:30,1')->name('messages.store');
+        Route::delete('/messages/{message}', 'destroy')->name('messages.destroy');
+    });
 });
 
 require __DIR__.'/admin.php';

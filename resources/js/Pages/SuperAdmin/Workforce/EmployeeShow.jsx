@@ -4,7 +4,7 @@ import { IssuedInvitation } from '@/Components/Console/Flash';
 import Panel, { MetricRow, PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
 import { ArrowRightIcon } from '@/Components/Icons';
-import AccountActionDialog from '@/Components/Workforce/AccountActionDialog';
+import AccountActionDialog, { canResetPassword } from '@/Components/Workforce/AccountActionDialog';
 import AccountForm from '@/Components/Workforce/AccountForm';
 import ConfirmDialog from '@/Components/Workforce/ConfirmDialog';
 import RateForm from '@/Components/Workforce/RateForm';
@@ -130,6 +130,15 @@ export default function EmployeeShow({ employee, section = 'employees', rateHist
                                 className="border border-console-line px-4 py-2 text-[13px] text-console-text transition-colors hover:border-arka-teal"
                             >
                                 Resend invite
+                            </button>
+                        )}
+                        {canResetPassword(employee) && (
+                            <button
+                                type="button"
+                                onClick={() => setAccountAction({ type: 'reset', account: employee })}
+                                className="border border-console-line px-4 py-2 text-[13px] text-console-text transition-colors hover:border-arka-teal"
+                            >
+                                Reset password
                             </button>
                         )}
                         <button

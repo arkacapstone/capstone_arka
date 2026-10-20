@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Performance\ManagePerformance;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Models\HomeOffice;
 use App\Models\KpiRecord;
 use App\Models\PayrollPeriod;
 use App\Models\Reward;
@@ -43,14 +44,14 @@ class PerformanceController extends Controller
         }
 
         $kpis = KpiRecord::query()
-            ->with(['employee:id,name,employee_code', 'period:id,period_name', 'evaluator:id,name'])
+            ->with(['employee:users.id,name,employee_code', 'period:id,period_name', 'evaluator:id,name'])
             ->withCount('rewards')
             ->latest('evaluated_at')
             ->limit(100)
             ->get();
 
         $rewards = Reward::query()
-            ->with(['employee:id,name,employee_code', 'awarder:id,name', 'kpi.period:id,period_name'])
+            ->with(['employee:users.id,name,employee_code', 'awarder:id,name', 'kpi.period:id,period_name'])
             ->latest('awarded_at')
             ->limit(100)
             ->get();
@@ -72,9 +73,9 @@ class PerformanceController extends Controller
             'rewards' => $rewards->map(fn (Reward $reward) => [
                 'id' => $reward->id,
                 'employee' => ['name' => $reward->employee->name, 'code' => $reward->employee->employee_code],
-                'type' => $reward->reward_type,
+                'type' => $reward->kind(),
                 'amount' => $reward->amount !== null ? (float) $reward->amount : null,
-                'description' => $reward->description,
+                'description' => $reward->note(),
                 'kpi' => $reward->kpi ? ($reward->kpi->period?->period_name ?? 'General').' · '.$reward->kpi->kpi_score : null,
                 'awarder' => $reward->awarder?->name,
                 'awardedAt' => $reward->awarded_at?->toIso8601String(),
@@ -96,8 +97,8 @@ class PerformanceController extends Controller
     public function evaluate(Request $request, ManagePerformance $manage): RedirectResponse
     {
         $validated = $request->validate([
-            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())],
-            'period_id' => ['nullable', 'integer', Rule::exists(PayrollPeriod::class, 'id')],
+            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())],
+            'period_id' => ['nullable', 'integer', Rule::exists(PayrollPeriod::class, 'id')->where('home_office_id', HomeOffice::currentId())],
             'kpi_score' => ['required', 'numeric', 'min:0', 'max:100'],
             'remarks' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -117,11 +118,11 @@ class PerformanceController extends Controller
     public function reward(Request $request, ManagePerformance $manage): RedirectResponse
     {
         $validated = $request->validate([
-            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())],
+            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())],
             'reward_type' => ['required', Rule::in(Reward::TYPES)],
             'amount' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'kpi_id' => ['nullable', 'integer', Rule::exists(KpiRecord::class, 'id')],
+            'kpi_id' => ['nullable', 'integer', Rule::exists(KpiRecord::class, 'id')->where(fn ($query) => $query->whereIn('contractor_id', User::query()->select('id')))],
         ]);
 
         $employee = User::findOrFail($validated['employee_id']);

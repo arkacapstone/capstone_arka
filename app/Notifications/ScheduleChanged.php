@@ -19,7 +19,7 @@ class ScheduleChanged extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->schedule->loadMissing('client:id,client_name');
+        $this->schedule->loadMissing('client:clients.id,client_name');
 
         $time = fn (string $value) => CarbonImmutable::parse($value)->format('g:i A');
         $window = $time($this->schedule->start_time).' – '.$time($this->schedule->end_time);

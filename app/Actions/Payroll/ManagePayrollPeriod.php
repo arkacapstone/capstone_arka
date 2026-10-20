@@ -5,6 +5,7 @@ namespace App\Actions\Payroll;
 use App\Actions\CashAdvances\ManageCashAdvance;
 use App\Enums\PayrollPeriodStatus;
 use App\Enums\PayrollStatus;
+use App\Models\ClientAssignment;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\User;
@@ -105,7 +106,7 @@ class ManagePayrollPeriod
             $period->update([
                 'status' => $previous,
                 // Unlocking reopens verification, with a new day to fix attendance, and the Admin submits it again.
-                ...($previous === PayrollPeriodStatus::Verification ? ['verification_opened_at' => now(), 'admin_submitted_at' => null, 'admin_submitted_by' => null] : []),
+                ...($previous === PayrollPeriodStatus::Verification ? ['verification_opened_at' => now(), 'admin_submitted_at' => null] : []),
             ]);
         });
 
@@ -198,7 +199,7 @@ class ManagePayrollPeriod
      */
     private function contractorRows(Payroll $row): HasMany
     {
-        return $row->period->payrolls()->where('employee_id', $row->employee_id);
+        return $row->period->payrolls()->forEmployee($row->employee_id);
     }
 
     public function delete(PayrollPeriod $period): void
@@ -213,7 +214,7 @@ class ManagePayrollPeriod
     }
 
     /**
-     * Payslips become available, and cash advance deductions become recorded repayments.
+     * Payslips become available. Cash advance installments were recorded when payroll was calculated.
      */
     private function release(PayrollPeriod $period): void
     {
@@ -241,7 +242,7 @@ class ManagePayrollPeriod
             PayrollPeriodStatus::Verification => Notification::send(PayrollCalculator::employeesFor($period), new PayrollVerificationOpened($period)),
             PayrollPeriodStatus::Locked => Notification::send(PayrollCalculator::employeesFor($period), new AttendanceLockedForPayroll($period)),
             PayrollPeriodStatus::Released => Notification::send(
-                User::query()->whereIn('id', $period->payrolls()->where('status', PayrollStatus::Released)->select('employee_id'))->get(),
+                User::query()->whereIn('id', ClientAssignment::query()->select('contractor_id')->whereIn('id', $period->payrolls()->where('status', PayrollStatus::Released)->select('assignment_id')))->get(),
                 new PayslipReleased($period),
             ),
             default => null,

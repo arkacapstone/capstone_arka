@@ -50,6 +50,26 @@ function PayrollHero({ payroll, pendingTotal, userName }) {
     );
 }
 
+/** Shown until the home office saves its Gmail: without it, ARKA cannot email its contractors. */
+function MailSetupReminder() {
+    return (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-4 border border-l-4 border-console-line border-l-arka-gold bg-console-panel px-5 py-4">
+            <div>
+                <p className="font-condensed text-lg font-bold text-console-heading">Set up your Home Office Gmail</p>
+                <p className="mt-0.5 text-sm text-console-muted">
+                    ARKA sends invites, password resets and notifications to your contractors from your home office's Gmail. Until it is set up, no emails go out.
+                </p>
+            </div>
+            <Link
+                href={`${route('super-admin.rules')}#email-sender`}
+                className="inline-flex shrink-0 items-center gap-2 bg-arka-teal px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-arka-teal/90"
+            >
+                Set up now <ArrowRightIcon className="h-4 w-4" />
+            </Link>
+        </div>
+    );
+}
+
 function BigFigure({ children }) {
     return <p className="mb-5 mt-7 font-mono text-4xl font-medium text-console-heading">{children}</p>;
 }
@@ -207,7 +227,7 @@ function RecentActivityCard({ activity }) {
     );
 }
 
-export default function Dashboard({ payroll, pendingApprovals, attendance, workforce, alerts, recentActivity }) {
+export default function Dashboard({ payroll, pendingApprovals, attendance, workforce, alerts, recentActivity, mailConfigured = true }) {
     const { auth } = usePage().props;
 
     // Keep the numbers live without a manual refresh.
@@ -218,6 +238,8 @@ export default function Dashboard({ payroll, pendingApprovals, attendance, workf
     return (
         <AppLayout title="Dashboard">
             <div className="mx-auto flex max-w-[1560px] flex-col gap-9">
+                {!mailConfigured && <MailSetupReminder />}
+
                 <PayrollHero payroll={payroll} pendingTotal={pendingApprovals.total} userName={auth.user.name} />
 
                 <div className="grid gap-9 lg:grid-cols-2 xl:grid-cols-3 xl:gap-7">

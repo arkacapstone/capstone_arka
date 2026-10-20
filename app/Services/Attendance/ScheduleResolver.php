@@ -14,12 +14,13 @@ class ScheduleResolver
     public function for(int $employeeId, ?int $clientId, CarbonInterface $date): ?Schedule
     {
         return Schedule::query()
-            ->where('employee_id', $employeeId)
-            ->when($clientId, fn ($query) => $query->where('client_id', $clientId))
+            ->forEmployee($employeeId)
+            ->when($clientId, fn ($query) => $query->forClient($clientId))
             ->active()
             ->applicableOn($date)
             ->orderByDesc('start_date')
             ->orderByDesc('id')
+            ->with('days')
             ->get()
             ->first(fn (Schedule $schedule) => $schedule->worksOn($date));
     }

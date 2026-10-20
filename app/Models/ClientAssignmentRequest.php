@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EmploymentType;
+use App\Models\Concerns\BelongsToContractor;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,12 +16,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * or rejects it. Once approved, the Admin can schedule the contractor for that client.
  */
 #[Fillable([
-    'employee_id', 'client_id', 'client_name', 'employment_type', 'break_allowance_minutes', 'requested_by', 'start_date',
-    'status', 'reviewed_by', 'reviewed_at', 'review_note', 'rate_id',
+    'contractor_id', 'employee_id', 'client_id', 'client_name', 'employment_type', 'break_allowance_minutes', 'requested_by', 'start_date',
+    'status', 'reviewed_by', 'reviewed_at', 'review_note',
 ])]
 class ClientAssignmentRequest extends Model
 {
-    use HasFactory;
+    use BelongsToContractor, HasFactory;
 
     public const STATUS_PENDING = 'pending';
 
@@ -38,14 +39,6 @@ class ClientAssignmentRequest extends Model
             'start_date' => 'immutable_date',
             'reviewed_at' => 'datetime',
         ];
-    }
-
-    /**
-     * @return BelongsTo<User, $this>
-     */
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'employee_id');
     }
 
     /**

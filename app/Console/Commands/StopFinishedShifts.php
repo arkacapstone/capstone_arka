@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Actions\TimeTracking\ManageTimer;
+use App\Models\HomeOffice;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -17,7 +18,11 @@ class StopFinishedShifts extends Command
 {
     public function handle(ManageTimer $timers): int
     {
-        $stopped = $timers->stopFinishedShifts();
+        // Once per home office, so each one's System & Rules apply.
+        $stopped = 0;
+        HomeOffice::each(function () use ($timers, &$stopped) {
+            $stopped += $timers->stopFinishedShifts();
+        });
 
         $this->info("Stopped {$stopped} ".str('timer')->plural($stopped).'.');
 

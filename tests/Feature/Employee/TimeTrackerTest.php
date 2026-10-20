@@ -202,8 +202,8 @@ class TimeTrackerTest extends TestCase
 
     public function test_each_card_shows_whether_that_client_is_full_time_or_part_time(): void
     {
-        $this->employee->update(['employment_type' => EmploymentType::FullTime]);
-        $this->employee->currentRates()->update(['employment_type' => EmploymentType::PartTime->value]);
+        // Full-Time / Part-Time is kept on the client assignment.
+        $this->employee->assignments()->update(['employment_type' => EmploymentType::PartTime->value]);
 
         $this->actingAs($this->employee)
             ->get(route('employee.time-tracker.index'))

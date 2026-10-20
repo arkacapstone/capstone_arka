@@ -21,7 +21,7 @@ class RateResource extends JsonResource
             'client' => $this->whenLoaded('client', fn () => [
                 'id' => $this->client->id,
                 'name' => $this->client->client_name,
-                'code' => $this->client->client_code,
+                'code' => null,
             ]),
             'grossPay' => (float) $this->gross_pay,
             'payFrequency' => $this->pay_frequency->value,

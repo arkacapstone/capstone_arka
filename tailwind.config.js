@@ -62,9 +62,15 @@ export default {
                     '0%, 100%': { transform: 'translateX(0) rotate(0deg)' },
                     '50%': { transform: 'translateX(-12px) rotate(-1.5deg)' },
                 },
+                // The login card slides down into place when it opens.
+                'drop-in': {
+                    '0%': { opacity: '0', transform: 'translateY(-48px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
             },
             animation: {
                 sway: 'sway 6s ease-in-out infinite',
+                'drop-in': 'drop-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
             },
         },
     },

@@ -52,7 +52,7 @@ class WorkforceReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with('currentRates.client:id,client_name')
+            ->with('currentRates.client:clients.id,client_name')
             ->orderBy('name')
             ->get()
             ->map(fn (User $user) => [

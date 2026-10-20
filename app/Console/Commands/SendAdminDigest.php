@@ -4,9 +4,11 @@ namespace App\Console\Commands;
 
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
+use App\Models\HomeOffice;
 use App\Models\User;
 use App\Notifications\AdminDailyDigest;
 use App\Services\Notifier;
+use App\Services\Settings\MailSettings;
 use App\Services\Settings\SystemRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
@@ -22,20 +24,32 @@ use Illuminate\Support\Facades\Cache;
 #[Description('Send Admins a digest of incomplete attendance and missing devotionals')]
 class SendAdminDigest extends Command
 {
-    public function handle(Notifier $notifier, SystemRules $rules): int
+    public function handle(Notifier $notifier, SystemRules $rules, MailSettings $mail): int
+    {
+        // Each home office has its own settings, records and Admins.
+        HomeOffice::each(function (HomeOffice $homeOffice) use ($notifier, $rules, $mail) {
+            $this->line("{$homeOffice->name}:");
+            $mail->apply();
+            $this->digest($notifier, $rules, $homeOffice);
+        });
+
+        return self::SUCCESS;
+    }
+
+    private function digest(Notifier $notifier, SystemRules $rules, HomeOffice $homeOffice): void
     {
         // A scheduled run follows System & Rules; an explicit --date always runs.
         if (! $this->option('date')) {
             if (! $rules->enabled('admin_digest_enabled')) {
                 $this->info('The admin digest is turned off in System & Rules.');
 
-                return self::SUCCESS;
+                return;
             }
 
             if (now()->format('H:i') < $rules->get('admin_digest_time')) {
                 $this->info('It is not time for the digest yet.');
 
-                return self::SUCCESS;
+                return;
             }
         }
 
@@ -56,19 +70,18 @@ class SendAdminDigest extends Command
         if ($incomplete === 0 && $devotionalsMissing === 0) {
             $this->info('Nothing to report.');
 
-            return self::SUCCESS;
+            return;
         }
 
-        if (! Cache::add("admin-digest:{$date->toDateString()}", true, now()->addDays(2))) {
+        if (! Cache::add("admin-digest:{$homeOffice->id}:{$date->toDateString()}", true, now()->addDays(2))) {
             $this->info('The digest for this day was already sent.');
 
-            return self::SUCCESS;
+            return;
         }
 
         $notifier->admins(new AdminDailyDigest($date, $incomplete, $devotionalsMissing));
 
         $this->info("Digest sent: {$incomplete} incomplete, {$devotionalsMissing} devotionals missing.");
 
-        return self::SUCCESS;
     }
 }

@@ -41,7 +41,7 @@ class EmployeeController extends AccountController
         ]);
 
         $employees = $this->filteredAccounts($filters)
-            ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $query->where('employment_type', $type))
+            ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $query->ofEmploymentType($type))
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
@@ -66,10 +66,10 @@ class EmployeeController extends AccountController
         $monthStart = CarbonImmutable::today()->startOfMonth();
 
         $schedules = $employee->schedules()
-            ->with('client:id,client_name,client_code,break_allowance_minutes')
-            ->orderByRaw('end_date is not null')
-            ->orderByDesc('start_date')
-            ->orderByDesc('id')
+            ->with(['client:clients.id,client_name,break_allowance_minutes', 'days'])
+            ->orderByRaw('schedules.end_date is not null')
+            ->orderByDesc('schedules.start_date')
+            ->orderByDesc('schedules.id')
             ->get();
 
         $monthCounts = $employee->attendances()
@@ -81,7 +81,7 @@ class EmployeeController extends AccountController
 
         return Inertia::render('Admin/Employees/Show', [
             'employee' => (new AccountResource($employee))->resolve($request),
-            'clients' => $employee->currentRates()->with('client:id,client_name')->get()->pluck('client.client_name')->all(),
+            'clients' => $employee->currentRates()->with('client:clients.id,client_name')->get()->pluck('client.client_name')->all(),
             'schedules' => ScheduleResource::collection($schedules)->resolve($request),
             'attendanceMonth' => [
                 'label' => $monthStart->format('F Y'),

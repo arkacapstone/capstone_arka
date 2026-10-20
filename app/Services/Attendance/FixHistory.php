@@ -28,8 +28,8 @@ class FixHistory
         }
 
         return AttendanceCorrection::query()
-            ->with('attendance.client:id,client_name')
-            ->where('employee_id', $employee->id)
+            ->with('client:clients.id,client_name')
+            ->forEmployee($employee->id)
             ->where('status', CorrectionStatus::Approved)
             ->whereDate('date', '>=', min($dates))
             ->whereDate('date', '<=', max($dates))
@@ -54,7 +54,7 @@ class FixHistory
             'id' => $correction->id,
             'attendanceId' => $correction->attendance_id,
             'date' => $correction->date->toDateString(),
-            'client' => $correction->attendance?->client?->client_name,
+            'client' => $correction->client?->client_name,
             'field' => FieldCorrected::label($correction->field_corrected),
             'before' => self::range(...$before),
             'after' => self::range(...$after),

@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Client;
 use App\Models\Schedule;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class ScheduleFactory extends Factory
 {
+    use ForAssignment;
+
     /**
      * @return array<string, mixed>
      */

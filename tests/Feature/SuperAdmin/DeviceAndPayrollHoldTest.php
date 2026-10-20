@@ -86,7 +86,7 @@ class DeviceAndPayrollHoldTest extends TestCase
         $this->loseDevice($laptop, $this->contractor);
         $this->loseDevice($headset, $this->other);
 
-        $this->assertSame('25000.00', DeviceDeduction::query()->whereHas('assignment', fn ($query) => $query->where('employee_id', $this->contractor->id))->sole()->amount);
+        $this->assertSame('25000.00', DeviceDeduction::query()->whereHas('assignment', fn ($query) => $query->where('contractor_id', $this->contractor->id))->sole()->amount);
         $this->assertSame(Device::STATUS_LOST, $laptop->refresh()->status);
 
         $this->get(route('super-admin.workforce.devices.index'))
@@ -99,8 +99,8 @@ class DeviceAndPayrollHoldTest extends TestCase
 
         $this->advance(); // Process payroll
 
-        $this->assertSame('25000.00', Payroll::query()->where('employee_id', $this->contractor->id)->sole()->device_deduction);
-        $this->assertSame('1250.50', Payroll::query()->where('employee_id', $this->other->id)->sole()->device_deduction);
+        $this->assertSame('25000.00', Payroll::query()->forEmployee($this->contractor->id)->sole()->device_deduction);
+        $this->assertSame('1250.50', Payroll::query()->forEmployee($this->other->id)->sole()->device_deduction);
     }
 
     public function test_a_device_needs_a_value_and_must_be_assigned_to_be_lost(): void
@@ -155,7 +155,7 @@ class DeviceAndPayrollHoldTest extends TestCase
         $this->loseDevice($this->addDevice('ThinkPad', 25000), $this->contractor);
         $this->advance(); // Process payroll
 
-        $row = Payroll::query()->where('employee_id', $this->contractor->id)->sole();
+        $row = Payroll::query()->forEmployee($this->contractor->id)->sole();
 
         // Lost company equipment is suggested as a reason to hold; the Super Admin decides.
         $this->actingAs($this->superAdmin)
@@ -172,7 +172,7 @@ class DeviceAndPayrollHoldTest extends TestCase
         $this->advance(); // released
 
         $this->assertSame(PayrollStatus::Approved, $row->refresh()->status);
-        $this->assertSame(PayrollStatus::Released, Payroll::query()->where('employee_id', $this->other->id)->sole()->status);
+        $this->assertSame(PayrollStatus::Released, Payroll::query()->forEmployee($this->other->id)->sole()->status);
         Notification::assertNotSentTo($this->contractor, PayslipReleased::class);
         Notification::assertSentTo($this->other, PayslipReleased::class);
         $this->assertSame('on_hold', app(EmployeePayslips::class)->for($this->contractor)->first()['status']);

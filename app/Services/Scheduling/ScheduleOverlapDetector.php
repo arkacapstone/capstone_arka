@@ -22,8 +22,8 @@ class ScheduleOverlapDetector
         $candidateEnd = isset($candidate['end_date']) ? CarbonImmutable::parse($candidate['end_date']) : null;
 
         return Schedule::query()
-            ->with('client:id,client_name')
-            ->where('employee_id', $candidate['employee_id'])
+            ->with(['client:clients.id,client_name', 'days'])
+            ->forEmployee((int) $candidate['employee_id'])
             ->active()
             ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
             ->get()

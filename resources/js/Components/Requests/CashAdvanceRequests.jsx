@@ -39,8 +39,8 @@ function ApproveDialog({ advance, custom, onClose }) {
                     <div className="border-t border-console-line">
                         <MetricRow label="Contractor" value={advance.employee.name} />
                         <MetricRow label="Requested" value={peso(advance.requestedAmount)} />
-                        {advance.grossPay !== null && <MetricRow label="Gross pay this pay period" value={peso(advance.grossPay)} />}
-                        {advance.payday && <MetricRow label="Deducted on payday" value={fullDate(advance.payday)} />}
+                        {advance.repaymentMonths && <MetricRow label="Repay over" value={`${advance.repaymentMonths} months · ${peso(advance.installment)} a month`} />}
+                        {advance.payday && <MetricRow label="First deduction" value={fullDate(advance.payday)} />}
                     </div>
                     {custom && (
                         <Field

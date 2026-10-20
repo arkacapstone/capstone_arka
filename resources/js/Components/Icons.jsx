@@ -46,6 +46,9 @@ import {
     Users,
     Wallet,
     X,
+    MessagesSquare,
+    SendHorizontal,
+    Trash2,
 } from 'lucide-react';
 
 function brand(IconComponent) {
@@ -103,6 +106,9 @@ export const ListIcon = brand(List);
 export const LockIcon = brand(LockKeyhole);
 export const ChevronLeftIcon = brand(ChevronLeft);
 export const ChevronRightIcon = brand(ChevronRight);
+export const ChatIcon = brand(MessagesSquare);
+export const SendIcon = brand(SendHorizontal);
+export const TrashIcon = brand(Trash2);
 
 /** Sidebar icon for each navigation key, across all roles. */
 export const moduleIcons = {
@@ -119,6 +125,7 @@ export const moduleIcons = {
     notifications: BellIcon,
     'activity-logs': HistoryIcon,
     profile: UserIcon,
+    community: ChatIcon,
     // Admin
     employees: UsersIcon,
     scheduling: CalendarClockIcon,

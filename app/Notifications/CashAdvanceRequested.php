@@ -18,7 +18,7 @@ class CashAdvanceRequested extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->advance->loadMissing('employee:id,name');
+        $this->advance->loadMissing('employee:users.id,name');
 
         return "{$this->advance->employee->name} requested ₱".number_format((float) $this->advance->amount, 2).": {$this->advance->reason}";
     }

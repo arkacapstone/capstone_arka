@@ -4,7 +4,7 @@ import { IssuedInvitation } from '@/Components/Console/Flash';
 import Panel, { Eyebrow, MetricRow, PanelHeading } from '@/Components/Console/Panel';
 import StatusBadge from '@/Components/Console/StatusBadge';
 import { ArrowLeftIcon } from '@/Components/Icons';
-import AccountActionDialog from '@/Components/Workforce/AccountActionDialog';
+import AccountActionDialog, { canResetPassword } from '@/Components/Workforce/AccountActionDialog';
 import AccountForm from '@/Components/Workforce/AccountForm';
 import Table, { Cell, Row } from '@/Components/Workforce/Table';
 import AppLayout from '@/Layouts/AppLayout';
@@ -51,6 +51,9 @@ export default function Show({ employee, clients, schedules, attendanceMonth, em
                         </ConsoleButton>
                         {employee.invited && (
                             <SecondaryButton onClick={() => setAccountAction({ type: 'invite', account: employee })}>Resend invite</SecondaryButton>
+                        )}
+                        {canResetPassword(employee) && (
+                            <SecondaryButton onClick={() => setAccountAction({ type: 'reset', account: employee })}>Reset password</SecondaryButton>
                         )}
                         <SecondaryButton onClick={() => setAccountAction({ type: 'status', account: employee })}>
                             {employee.status === 'active' ? 'Deactivate' : 'Activate'}

@@ -23,7 +23,7 @@ class OvertimeController extends Controller
 
         return Inertia::render('Employee/Overtime', [
             'tickets' => $user->overtimeRequests()
-                ->with(['client:id,client_name', 'reviewer:id,name'])
+                ->with(['client:clients.id,client_name', 'reviewer:id,name'])
                 ->latest('date')
                 ->latest('id')
                 ->limit(50)
@@ -40,7 +40,7 @@ class OvertimeController extends Controller
                     'amount' => $ticket->amount !== null ? (float) $ticket->amount : null,
                     'note' => $ticket->review_note,
                 ])->all(),
-            'clients' => $user->currentRates()->with('client:id,client_name')->get()
+            'clients' => $user->currentRates()->with('client:clients.id,client_name')->get()
                 ->map(fn (Rate $rate) => ['value' => $rate->client_id, 'label' => $rate->client->client_name])->values()->all(),
         ]);
     }

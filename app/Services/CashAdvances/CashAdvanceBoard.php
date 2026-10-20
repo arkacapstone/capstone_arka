@@ -22,10 +22,11 @@ class CashAdvanceBoard
     public function advances(string $tab, ?string $search = null): array
     {
         return CashAdvance::query()
-            ->with(['employee:id,name,employee_code', 'approver:id,name', 'repayments' => fn ($query) => $query->latest('repayment_date')])
+            ->with(['employee:users.id,name,employee_code', 'approver:id,name', 'repayments' => fn ($query) => $query->latest('repayment_date')])
+            ->withBalance()
             ->when($tab === 'pending', fn (Builder $query) => $query->where('status', CashAdvanceStatus::Pending))
             ->when($tab === 'active', fn (Builder $query) => $query->outstanding())
-            ->when($tab === 'history', fn (Builder $query) => $query->whereIn('status', [CashAdvanceStatus::Repaid, CashAdvanceStatus::Rejected, CashAdvanceStatus::Cancelled]))
+            ->when($tab === 'history', fn (Builder $query) => $query->closed())
             ->when($search, fn (Builder $query, string $search) => $query->whereHas(
                 'employee', fn (Builder $query) => $query->where('name', 'like', "%{$search}%")->orWhere('employee_code', 'like', "%{$search}%")
             ))
@@ -38,13 +39,13 @@ class CashAdvanceBoard
                 'amount' => (float) $advance->amount,
                 'requestedAmount' => (float) ($advance->requested_amount ?? $advance->amount),
                 'payday' => $advance->payday?->toDateString(),
-                // The contractor's gross pay for that pay period: the most the request could be.
-                'grossPay' => $advance->gross_pay !== null ? (float) $advance->gross_pay : null,
+                'repaymentMonths' => $advance->repayment_months,
+                'installment' => $advance->monthly_installment,
                 'remaining' => (float) $advance->remaining_balance,
                 'repaid' => round((float) $advance->amount - (float) $advance->remaining_balance, 2),
                 'reason' => $advance->reason,
-                'status' => $advance->status->value,
-                'statusLabel' => $advance->status->label(),
+                'status' => $advance->displayStatus()->value,
+                'statusLabel' => $advance->displayStatus()->label(),
                 'requestedAt' => $advance->created_at->toIso8601String(),
                 'releasedDate' => $advance->released_date?->toDateString(),
                 'approver' => $advance->approver?->name,
@@ -66,7 +67,7 @@ class CashAdvanceBoard
     {
         return [
             'pending' => CashAdvance::query()->pending()->count(),
-            'outstanding' => round((float) CashAdvance::query()->outstanding()->sum('remaining_balance'), 2),
+            'outstanding' => round(CashAdvance::query()->outstanding()->withBalance()->get()->sum('remaining_balance'), 2),
             'activeCount' => CashAdvance::query()->outstanding()->count(),
             'releasedThisMonth' => round((float) CashAdvance::query()->whereDate('released_date', '>=', CarbonImmutable::today()->startOfMonth())->sum('amount'), 2),
         ];

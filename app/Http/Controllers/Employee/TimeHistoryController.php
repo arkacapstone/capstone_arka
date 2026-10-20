@@ -39,8 +39,8 @@ class TimeHistoryController extends Controller
         $filtered = fn () => $user->timeLogs()
             ->when($filters['from'] ?? null, fn (Builder $query, string $from) => $query->whereDate('date', '>=', $from))
             ->when($filters['to'] ?? null, fn (Builder $query, string $to) => $query->whereDate('date', '<=', $to))
-            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->where('client_id', $client))
-            ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status));
+            ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->forClient($client))
+            ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->withStatus(TimeLogStatus::from($status)));
 
         // One page = a few days, each with all of its sessions.
         $allDates = $filtered()->orderByDesc('date')->pluck('date')->map(fn ($date) => $date->toDateString())->unique()->values();
@@ -55,7 +55,7 @@ class TimeHistoryController extends Controller
         $dates = $days->items();
 
         $sessions = $dates === [] ? collect() : $filtered()
-            ->with('client:id,client_name')
+            ->with('client:clients.id,client_name')
             ->whereDate('date', '>=', min($dates))
             ->whereDate('date', '<=', max($dates))
             ->orderByDesc('time_in')
@@ -83,7 +83,7 @@ class TimeHistoryController extends Controller
                 'client' => $filters['client'] ?? '',
                 'status' => $filters['status'] ?? '',
             ],
-            'clients' => $user->timeLogs()->with('client:id,client_name')->get()->pluck('client')->filter()->unique('id')
+            'clients' => $user->timeLogs()->with('client:clients.id,client_name')->get()->pluck('client')->filter()->unique('id')
                 ->sortBy('client_name')->values()->map(fn ($client) => ['value' => $client->id, 'label' => $client->client_name])->all(),
             'statuses' => TimeLogStatus::options(),
         ]);

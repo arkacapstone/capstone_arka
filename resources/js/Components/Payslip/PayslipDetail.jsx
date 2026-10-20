@@ -2,6 +2,7 @@ import { ConsoleButton } from '@/Components/Console/Field';
 import { Eyebrow } from '@/Components/Console/Panel';
 import { DownloadIcon } from '@/Components/Icons';
 import { dateRange, fullDate, peso } from '@/lib/format';
+import { usePage } from '@inertiajs/react';
 
 /** "Download as PDF": prints only the payslip (see the print rules in app.css). */
 export function printPayslip() {
@@ -40,9 +41,16 @@ function Lines({ title, lines, total, totalLabel }) {
  * net pay in the reversed navy field. `actions` sits beside the Download button.
  */
 export default function PayslipDetail({ payslip, employee, actions = null, note = null }) {
+    const { homeOffice } = usePage().props;
+
     return (
         <div data-print-root className="bg-console-panel">
-            <p className="hidden font-condensed text-2xl font-bold text-console-heading print:block">ARKA · Payslip</p>
+            {/* Printed only: the home office (name and address) issuing the payslip. */}
+            <div className="hidden print:block">
+                {homeOffice && <p className="text-sm font-semibold text-console-heading">{homeOffice.name}</p>}
+                {homeOffice?.address && <p className="text-xs text-console-muted">{homeOffice.address}</p>}
+                <p className="mt-2 font-condensed text-2xl font-bold text-console-heading">ARKA · Payslip</p>
+            </div>
             <p className="font-condensed text-2xl font-bold text-console-heading">{employee.name}</p>
             <p className="mt-1 font-mono text-xs text-console-muted">
                 {employee.code}

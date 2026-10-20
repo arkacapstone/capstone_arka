@@ -36,14 +36,15 @@ class PayslipController extends Controller
         $periodId = (int) ($filters['period'] ?? $periods->first()?->id);
 
         $slips = Payroll::query()
+            ->withAmounts()
             ->where('period_id', $periodId)
-            ->with(['period', 'client:id,client_name', 'rate', 'rewards', 'employee:id,name,employee_code,employment_type,role'])
+            ->with(['assignment', 'period', 'client:clients.id,client_name', 'rate', 'rewards', 'employee:users.id,name,employee_code,role'])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->whereHas(
                 'employee',
                 fn (Builder $query) => $query->where('name', 'like', "%{$search}%")->orWhere('employee_code', 'like', "%{$search}%"),
             ))
             ->get()
-            ->groupBy('employee_id')
+            ->groupBy(fn (Payroll $row) => $row->assignment->contractor_id)
             ->map(function (Collection $rows) use ($payslips) {
                 $employee = $rows->first()->employee;
 

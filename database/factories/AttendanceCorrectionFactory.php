@@ -4,7 +4,9 @@ namespace Database\Factories;
 
 use App\Enums\CorrectionStatus;
 use App\Models\AttendanceCorrection;
+use App\Models\Client;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -12,13 +14,16 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class AttendanceCorrectionFactory extends Factory
 {
+    use ForAssignment;
+
     /**
      * @return array<string, mixed>
      */
     public function definition(): array
     {
         return [
-            'employee_id' => User::factory(),
+            'employee_id' => fn (array $attributes) => isset($attributes['attendance_id']) ? null : User::factory(),
+            'client_id' => fn (array $attributes) => isset($attributes['attendance_id']) ? null : Client::factory(),
             'date' => today(),
             'source' => 'employee',
             'field_corrected' => 'time_out',

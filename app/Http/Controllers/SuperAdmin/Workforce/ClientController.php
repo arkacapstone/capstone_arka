@@ -27,7 +27,7 @@ class ClientController extends Controller
         $clients = Client::query()
             ->withCount(['rates as assigned_count' => fn (Builder $query) => $query->current()])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->where(
-                fn (Builder $query) => $query->where('client_name', 'like', "%{$search}%")->orWhere('client_code', 'like', "%{$search}%")
+                fn (Builder $query) => $query->where('client_name', 'like', "%{$search}%")
             ))
             ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->where('is_active', $status === 'active'))
             ->orderBy('client_name')
@@ -37,7 +37,7 @@ class ClientController extends Controller
             ->through(fn (Client $client) => [
                 'id' => $client->id,
                 'name' => $client->client_name,
-                'code' => $client->client_code,
+                'code' => null,
                 'status' => $client->is_active ? 'active' : 'inactive',
                 'assignedCount' => $client->assigned_count,
                 'breakAllowance' => $client->break_allowance_minutes,

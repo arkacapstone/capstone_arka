@@ -19,7 +19,7 @@ class AttendanceVerified extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->verification->loadMissing('employee:id,name,employee_code', 'period:id,period_name');
+        $this->verification->loadMissing('employee:users.id,name,employee_code', 'period:id,period_name');
         $fixes = $this->verification->corrections()->count();
         $fixed = $fixes === 0 ? 'No days fixed.' : ($fixes === 1 ? '1 fix made before submitting.' : "{$fixes} fixes made before submitting.");
 

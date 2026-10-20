@@ -19,7 +19,7 @@ class MonthlySummary
     public function for(User $employee, CarbonImmutable $month): array
     {
         $records = $employee->attendances()
-            ->with('schedule')
+            ->with('assignmentTimeLogs')
             ->whereDate('date', '>=', $month->startOfMonth())
             ->whereDate('date', '<=', $month->endOfMonth())
             ->get();

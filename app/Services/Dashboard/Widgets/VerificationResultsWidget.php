@@ -33,17 +33,17 @@ class VerificationResultsWidget implements DashboardWidget
      */
     public function data(): array
     {
-        $period = PayrollPeriod::query()->with('adminSubmitter:id,name')->whereNotNull('verification_opened_at')->latest('verification_opened_at')->first();
+        $period = PayrollPeriod::query()->whereNotNull('verification_opened_at')->latest('verification_opened_at')->first();
 
         if ($period === null) {
             return ['period' => null, 'counts' => null, 'contractors' => []];
         }
 
         $verifications = AttendanceVerification::query()
-            ->when($this->withChanges, fn ($query) => $query->with('corrections.attendance.client:id,client_name'))
+            ->when($this->withChanges, fn ($query) => $query->with('corrections.client:clients.id,client_name'))
             ->where('period_id', $period->id)
             ->get()
-            ->keyBy('employee_id');
+            ->keyBy('contractor_id');
 
         $everyone = PayrollCalculator::employeesFor($period)
             ->map(function (User $contractor) use ($verifications, $period) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\SuperAdmin\Workforce;
 
 use App\Actions\Accounts\ChangeAccountStatus;
 use App\Actions\Accounts\InvitedAccount;
+use App\Actions\Accounts\ResetPassword;
 use App\Actions\Accounts\SendInvitation;
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
@@ -17,8 +18,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Behaviour shared by every Workforce Management account list: search,
- * status counts, activation, and resending invites. A forgotten password is reset by the
- * account owner from "Forgot your password?" on the login page.
+ * status counts, activation, resending invites and resetting forgotten passwords.
  */
 abstract class AccountController extends Controller
 {
@@ -53,6 +53,22 @@ abstract class AccountController extends Controller
         $invitation = $sendInvitation->handle($account);
 
         return $this->withInvitation(back(), new InvitedAccount($account, $invitation['url'], $invitation['defaultPassword'], $invitation['emailed']), 'New login details created.');
+    }
+
+    /**
+     * Emails a new default password to an active, verified account that forgot its password. They
+     * create their own on the next login. Only Admins and contractors are managed here, so the Super
+     * Admin's password is never reset this way.
+     */
+    public function resetPassword(User $account, ResetPassword $resetPassword): RedirectResponse
+    {
+        $account = $this->managed($account);
+
+        abort_if($account->isInvited() || $account->status !== UserStatus::Active->value, 404);
+
+        $reset = $resetPassword->handle($account);
+
+        return $this->withInvitation(back(), new InvitedAccount($account, $reset['url'], $reset['defaultPassword'], $reset['emailed']), 'Password reset.', 'reset');
     }
 
     /**
@@ -105,18 +121,24 @@ abstract class AccountController extends Controller
     }
 
     /**
-     * Confirms the invite went out. If the email failed, the link is shown once so it can be shared another way.
+     * Confirms the invite (or password reset) went out. If the email failed, the login details are shown
+     * once so they can be shared another way.
+     *
+     * @param  'invite'|'reset'  $kind
      */
-    protected function withInvitation(RedirectResponse $response, InvitedAccount $invited, string $message): RedirectResponse
+    protected function withInvitation(RedirectResponse $response, InvitedAccount $invited, string $message, string $kind = 'invite'): RedirectResponse
     {
         if ($invited->emailed) {
             return $response->with('success', "{$message} Login details sent to {$invited->user->email}.");
         }
 
+        $email = $kind === 'reset' ? 'password reset email' : 'invite email';
+
         return $response
             ->with('success', $message)
-            ->with('warning', 'The invite email could not be sent. Copy the login details below and share them privately.')
+            ->with('warning', "The {$email} could not be sent. Copy the login details below and share them privately.")
             ->with('invitation', [
+                'kind' => $kind,
                 'name' => $invited->user->name,
                 'email' => $invited->user->email,
                 'employeeCode' => $invited->user->employee_code,

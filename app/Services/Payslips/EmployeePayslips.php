@@ -23,7 +23,8 @@ class EmployeePayslips
     public function for(User $employee): Collection
     {
         return $employee->payrolls()
-            ->with(['period', 'client:id,client_name', 'rate', 'rewards'])
+            ->withAmounts()
+            ->with(['assignment', 'period', 'client:clients.id,client_name', 'rate', 'rewards'])
             ->get()
             ->groupBy('period_id')
             ->map(fn (Collection $rows) => $this->present($rows))
@@ -79,9 +80,9 @@ class EmployeePayslips
                 ->values()->all(),
             // Rewards with an amount (Performance & Rewards) are Additional Pay too.
             ...$rows->flatMap(fn (Payroll $row) => $row->rewards)->map(fn (Reward $reward) => [
-                'label' => "Additional Pay (Reward · {$reward->reward_type})",
+                'label' => "Additional Pay (Reward · {$reward->kind()})",
                 'amount' => (float) $reward->amount,
-                'detail' => $reward->description,
+                'detail' => $reward->note(),
             ])->values()->all(),
             ...$rows->filter(fn (Payroll $row) => (float) $row->additional_pay > 0)->map(fn (Payroll $row) => [
                 'label' => "Additional Hours Pay ({$row->client?->client_name})",
@@ -101,7 +102,7 @@ class EmployeePayslips
         $deductions = array_values(array_filter([
             ['label' => 'Absences', 'amount' => $sum('absence_deduction'), 'detail' => $daysAbsent > 0 ? rtrim(rtrim(number_format($daysAbsent, 1), '0'), '.').' '.($daysAbsent == 1 ? 'day' : 'days') : null],
             ['label' => 'Late / Undertime', 'amount' => $sum('late_deduction'), 'detail' => $lateMinutes > 0 ? self::duration($lateMinutes) : null],
-            ['label' => 'Cash Advance Repayment', 'amount' => $sum('cash_advance_deduction'), 'detail' => 'Given before payday, deducted in full'],
+            ['label' => 'Cash Advance Repayment', 'amount' => $sum('cash_advance_deduction'), 'detail' => 'Installment, repaid over 2 or 3 months'],
             ['label' => 'Device', 'amount' => $sum('device_deduction')],
             ['label' => 'Other approved deductions', 'amount' => $sum('other_deductions')],
         ], fn (array $line) => $line['amount'] > 0));

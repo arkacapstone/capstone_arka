@@ -48,6 +48,8 @@ class HandleInertiaRequests extends Middleware
                     'appearance' => $user->appearance?->value ?? 'system',
                 ] : null,
             ],
+            // The signed-in user's home office, printed at the top of payslips.
+            'homeOffice' => fn () => $user?->homeOffice ? ['name' => $user->homeOffice->name, 'address' => $user->homeOffice->address] : null,
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
                 'warning' => $request->session()->get('warning'),

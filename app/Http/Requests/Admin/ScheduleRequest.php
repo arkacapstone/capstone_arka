@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\UserRole;
 use App\Enums\Weekday;
 use App\Models\Client;
+use App\Models\HomeOffice;
 use App\Models\Schedule;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -32,8 +33,8 @@ class ScheduleRequest extends FormRequest
         return [
             'employee_id' => $changing
                 ? ['prohibited']
-                : ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
-            'client_id' => ['required', 'integer', Rule::exists(Client::class, 'id')->where('is_active', true)],
+                : ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
+            'client_id' => ['required', 'integer', Rule::exists(Client::class, 'id')->where('home_office_id', HomeOffice::currentId())->where('is_active', true)],
             'working_days' => ['required', 'array', 'min:1', 'max:'.Schedule::MAX_WORKING_DAYS],
             'working_days.*' => ['distinct', Rule::enum(Weekday::class)],
             'start_time' => ['required', 'date_format:H:i'],

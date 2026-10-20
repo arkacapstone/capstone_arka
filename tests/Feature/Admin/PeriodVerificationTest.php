@@ -147,12 +147,13 @@ class PeriodVerificationTest extends TestCase
         // Submitting twice is refused.
         $this->post(route('admin.verification.submit', $this->period))->assertSessionHasErrors('period');
 
-        $this->assertSame($this->admin->id, $this->period->refresh()->admin_submitted_by);
+        // Who submitted is read from the activity log.
+        $this->assertSame($this->admin->id, $this->period->refresh()->adminSubmitter?->id);
         Notification::assertSentTo($this->superAdmin, VerifiedPeriodSubmitted::class);
 
         // Whoever never submitted is submitted for them, as recorded, and told so.
-        $this->assertTrue(AttendanceVerification::query()->where('employee_id', $this->waiting->id)->sole()->auto_submitted);
-        $this->assertFalse(AttendanceVerification::query()->where('employee_id', $this->submitted->id)->sole()->auto_submitted);
+        $this->assertTrue(AttendanceVerification::query()->where('contractor_id', $this->waiting->id)->sole()->auto_submitted);
+        $this->assertFalse(AttendanceVerification::query()->where('contractor_id', $this->submitted->id)->sole()->auto_submitted);
         Notification::assertSentTo($this->waiting, AttendanceAutoSubmitted::class);
         Notification::assertNotSentTo($this->submitted, AttendanceAutoSubmitted::class);
 
@@ -182,7 +183,7 @@ class PeriodVerificationTest extends TestCase
 
     public function test_unlocking_attendance_asks_the_admin_to_submit_again(): void
     {
-        $this->period->update(['status' => PayrollPeriodStatus::Locked, 'admin_submitted_at' => now(), 'admin_submitted_by' => $this->admin->id]);
+        $this->period->update(['status' => PayrollPeriodStatus::Locked, 'admin_submitted_at' => now()]);
 
         $this->actingAs($this->superAdmin)
             ->post(route('super-admin.payroll.revert', $this->period))

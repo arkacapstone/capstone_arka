@@ -19,6 +19,19 @@ enum Weekday: string
         return self::from(strtolower($date->format('D')));
     }
 
+    /**
+     * ISO-8601 day number as stored in schedule_days.day_of_week: 1 = Monday … 7 = Sunday.
+     */
+    public function isoNumber(): int
+    {
+        return array_search($this, self::cases(), true) + 1;
+    }
+
+    public static function fromIsoNumber(int $number): self
+    {
+        return self::cases()[$number - 1];
+    }
+
     public function short(): string
     {
         return ucfirst($this->value);

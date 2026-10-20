@@ -19,7 +19,8 @@ class LeaveRequestFactory extends Factory
     public function definition(): array
     {
         return [
-            'employee_id' => User::factory(),
+            // contractor_id is the user's id; employee_id is another name for it.
+            'contractor_id' => fn (array $attributes) => $attributes['employee_id'] ?? User::factory(),
             'leave_type_id' => LeaveType::factory(),
             'start_date' => now()->addWeek(),
             'end_date' => now()->addWeek()->addDay(),

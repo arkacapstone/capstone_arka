@@ -40,20 +40,20 @@ class EmployeeController extends AccountController
         ]);
 
         $employees = $this->filteredAccounts($filters)
-            ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $query->where('employment_type', $type))
+            ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $query->ofEmploymentType($type))
             ->when($filters['client'] ?? null, fn (Builder $query, int $client) => $query->whereHas(
-                'currentRates', fn (Builder $query) => $query->where('client_id', $client)
+                'currentRates', fn (Builder $query) => $query->forClient($client)
             ))
             ->with('currentRates.client', 'rates.client')
             ->paginate(self::PER_PAGE)
             ->withQueryString();
 
+        // Full-Time / Part-Time is read from each contractor's open client assignments.
         $typeCounts = User::query()
             ->withRole(UserRole::Employee)
-            ->selectRaw('employment_type, count(*) as total')
-            ->groupBy('employment_type')
-            ->toBase()
-            ->pluck('total', 'employment_type');
+            ->with('assignments')
+            ->get()
+            ->countBy(fn (User $user) => $user->employment_type?->value ?? '');
 
         return Inertia::render('SuperAdmin/Workforce/Employees', [
             'employees' => AccountResource::collection($employees),
@@ -80,10 +80,10 @@ class EmployeeController extends AccountController
         $employee = $account->load('currentRates.client');
 
         $history = $employee->rates()
-            ->whereNotNull('end_date')
-            ->with('client')
-            ->orderByDesc('end_date')
-            ->orderByDesc('id')
+            ->whereNotNull('rates.end_date')
+            ->with(['assignment', 'client'])
+            ->orderByDesc('rates.end_date')
+            ->orderByDesc('rates.id')
             ->get();
 
         return Inertia::render('SuperAdmin/Workforce/EmployeeShow', [
@@ -118,8 +118,8 @@ class EmployeeController extends AccountController
         return Client::query()
             ->active()
             ->orderBy('client_name')
-            ->get(['id', 'client_name', 'client_code'])
-            ->map(fn (Client $client) => ['id' => $client->id, 'name' => $client->client_name, 'code' => $client->client_code])
+            ->get(['id', 'client_name'])
+            ->map(fn (Client $client) => ['id' => $client->id, 'name' => $client->client_name, 'code' => null])
             ->all();
     }
 }

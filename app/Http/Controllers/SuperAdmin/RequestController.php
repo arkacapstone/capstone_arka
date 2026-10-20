@@ -140,7 +140,7 @@ class RequestController extends Controller
     private function overtimeTickets(string $tab): array
     {
         return OvertimeRequest::query()
-            ->with(['employee:id,name,employee_code', 'employee.currentRates', 'client:id,client_name', 'reviewer:id,name'])
+            ->with(['employee:users.id,name,employee_code', 'employee.currentRates', 'client:clients.id,client_name', 'reviewer:id,name'])
             ->when($tab === 'pending', fn ($query) => $query->pending()->oldest('date'))
             ->when($tab === 'history', fn ($query) => $query->whereIn('status', [OvertimeRequest::STATUS_APPROVED, OvertimeRequest::STATUS_REJECTED])->latest('reviewed_at'))
             ->limit(100)
@@ -178,7 +178,7 @@ class RequestController extends Controller
     private function leaveRequests(string $tab): array
     {
         return LeaveRequest::query()
-            ->with(['employee:id,name,employee_code,role', 'leaveType:id,leave_type_name,is_paid', 'reviewer:id,name'])
+            ->with(['employee:users.id,name,employee_code,role', 'leaveType:id,leave_type_name,is_paid', 'reviewer:id,name'])
             ->when($tab === 'pending', fn ($query) => $query->pending()->orderBy('start_date'))
             ->when($tab === 'history', fn ($query) => $query->whereNotIn('status', LeaveRequestStatus::openValues())->orderByDesc('updated_at'))
             ->orderBy('id')
@@ -211,7 +211,7 @@ class RequestController extends Controller
     private function clientAssignments(string $tab): array
     {
         return ClientAssignmentRequest::query()
-            ->with(['employee:id,name,employee_code,employment_type', 'employee.currentRates.client:id,client_name', 'client:id,client_name,client_code', 'requester:id,name', 'reviewer:id,name'])
+            ->with(['employee:users.id,name,employee_code', 'employee.currentRates.client:clients.id,client_name', 'client:clients.id,client_name', 'requester:id,name', 'reviewer:id,name'])
             ->when($tab === 'pending', fn ($query) => $query->pending()->oldest())
             ->when($tab === 'history', fn ($query) => $query->whereIn('status', [ClientAssignmentRequest::STATUS_APPROVED, ClientAssignmentRequest::STATUS_REJECTED])->latest('reviewed_at'))
             ->limit(100)
@@ -224,7 +224,7 @@ class RequestController extends Controller
                     'type' => $assignment->employee->employment_type?->label(),
                     'currentClients' => $assignment->employee->currentRates->map(fn (Rate $rate) => $rate->client?->client_name)->filter()->values()->all(),
                 ],
-                'client' => ['name' => $assignment->clientName(), 'code' => $assignment->client?->client_code, 'isNew' => $assignment->client_id === null],
+                'client' => ['name' => $assignment->clientName(), 'code' => null, 'isNew' => $assignment->client_id === null],
                 'employmentType' => $assignment->employment_type?->value,
                 'employmentTypeLabel' => $assignment->employment_type?->label(),
                 'breakAllowance' => $assignment->break_allowance_minutes,

@@ -2,17 +2,19 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToHomeOffice;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
-#[Fillable(['client_name', 'client_code', 'break_allowance_minutes', 'is_active'])]
+#[Fillable(['client_name', 'break_allowance_minutes', 'is_active'])]
 class Client extends Model
 {
-    use HasFactory;
+    use BelongsToHomeOffice, HasFactory;
 
     /**
      * Break minutes per session for a new client. Informational only: going over never reduces pay.
@@ -28,11 +30,21 @@ class Client extends Model
     }
 
     /**
-     * @return HasMany<Rate, $this>
+     * @return HasMany<ClientAssignment, $this>
      */
-    public function rates(): HasMany
+    public function assignments(): HasMany
     {
-        return $this->hasMany(Rate::class);
+        return $this->hasMany(ClientAssignment::class);
+    }
+
+    /**
+     * Every rate for this client, through its assignments.
+     *
+     * @return HasManyThrough<Rate, ClientAssignment, $this>
+     */
+    public function rates(): HasManyThrough
+    {
+        return $this->hasManyThrough(Rate::class, ClientAssignment::class, 'client_id', 'assignment_id');
     }
 
     /**
@@ -41,20 +53,6 @@ class Client extends Model
     public static function named(string $name): ?self
     {
         return self::query()->whereRaw('LOWER(TRIM(client_name)) = ?', [mb_strtolower(trim($name))])->orderBy('id')->first();
-    }
-
-    /**
-     * Next free code for a new client: CL-0001, CL-0002, ...
-     */
-    public static function nextCode(): string
-    {
-        $number = (int) self::query()->max('id') + 1;
-
-        do {
-            $code = 'CL-'.str_pad((string) $number++, 4, '0', STR_PAD_LEFT);
-        } while (self::query()->where('client_code', $code)->exists());
-
-        return $code;
     }
 
     #[Scope]

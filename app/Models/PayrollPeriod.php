@@ -4,19 +4,25 @@ namespace App\Models;
 
 use App\Enums\PayFrequency;
 use App\Enums\PayrollPeriodStatus;
+use App\Models\Concerns\BelongsToHomeOffice;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['period_name', 'start_date', 'end_date', 'cutoff_date', 'release_date', 'pay_frequency', 'status', 'verification_opened_at', 'admin_submitted_at', 'admin_submitted_by', 'last_reminded_at', 'last_reminded_count'])]
+#[Fillable(['period_name', 'start_date', 'end_date', 'cutoff_date', 'release_date', 'pay_frequency', 'status', 'verification_opened_at', 'admin_submitted_at', 'last_reminded_at', 'last_reminded_count'])]
 class PayrollPeriod extends Model
 {
-    use HasFactory;
+    use BelongsToHomeOffice, HasFactory;
+
+    /**
+     * The activity log action written when the Admin submits the verified period.
+     */
+    public const SUBMITTED_ACTION = 'Submitted verified period to the Super Admin';
 
     protected function casts(): array
     {
@@ -36,12 +42,16 @@ class PayrollPeriod extends Model
 
     /**
      * The Admin who reviewed the contractors' changes and submitted the verified period.
-     *
-     * @return BelongsTo<User, $this>
      */
-    public function adminSubmitter(): BelongsTo
+    protected function adminSubmitter(): Attribute
     {
-        return $this->belongsTo(User::class, 'admin_submitted_by');
+        // Who submitted is read from the activity log, so the period keeps no *_by column.
+        return Attribute::get(fn () => $this->admin_submitted_at === null ? null : ActivityLog::query()
+            ->where('reference_table', $this->getTable())
+            ->where('reference_id', $this->id)
+            ->where('action', self::SUBMITTED_ACTION)
+            ->latest('id')
+            ->first()?->user);
     }
 
     /**

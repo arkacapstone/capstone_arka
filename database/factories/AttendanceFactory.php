@@ -6,6 +6,7 @@ use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class AttendanceFactory extends Factory
 {
+    use ForAssignment;
+
     /**
      * @return array<string, mixed>
      */

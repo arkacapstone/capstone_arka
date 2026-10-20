@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Client;
 use App\Models\TimeLog;
 use App\Models\User;
+use Database\Factories\Concerns\ForAssignment;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class TimeLogFactory extends Factory
 {
+    use ForAssignment;
+
     /**
      * A timer that is still running.
      *
@@ -24,7 +27,6 @@ class TimeLogFactory extends Factory
             'client_id' => Client::factory(),
             'date' => today(),
             'time_in' => now()->subHour(),
-            'status' => 'running',
         ];
     }
 

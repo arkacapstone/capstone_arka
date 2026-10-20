@@ -4,6 +4,7 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Models\KpiRecord;
 use App\Models\PayrollPeriod;
+use App\Models\Reward;
 use App\Models\User;
 use App\Notifications\RewardGranted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,7 +69,7 @@ class PerformanceTest extends TestCase
     {
         Notification::fake();
         $employee = User::factory()->create();
-        $kpi = KpiRecord::create(['employee_id' => $employee->id, 'kpi_score' => 95, 'evaluated_at' => now()]);
+        $kpi = KpiRecord::create(['contractor_id' => $employee->id, 'kpi_score' => 95, 'evaluated_at' => now()]);
 
         $this->actingAs($this->superAdmin)
             ->post(route('super-admin.performance.reward'), ['employee_id' => $employee->id, 'reward_type' => 'Bonus', 'amount' => 1500, 'kpi_id' => $kpi->id])
@@ -81,15 +82,18 @@ class PerformanceTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('rewards', 1)->where('rewards.0.type', 'Bonus')->where('summary.incentivesThisMonth', 1500));
     }
 
-    public function test_removing_an_evaluation_keeps_its_rewards(): void
+    public function test_an_evaluation_with_rewards_cannot_be_removed(): void
     {
+        // Every reward comes from an evaluation, so removing one would leave its rewards without one.
         $employee = User::factory()->create();
-        $kpi = KpiRecord::create(['employee_id' => $employee->id, 'kpi_score' => 75, 'evaluated_at' => now()]);
-        $reward = $employee->rewards()->create(['kpi_id' => $kpi->id, 'reward_type' => 'Recognition', 'awarded_at' => now()]);
+        $kpi = KpiRecord::create(['contractor_id' => $employee->id, 'kpi_score' => 75, 'evaluated_at' => now()]);
+        Reward::create(['kpi_id' => $kpi->id, 'reward_type' => Reward::NON_CASH, 'description' => 'Recognition', 'awarded_at' => now()]);
 
-        $this->actingAs($this->superAdmin)->delete(route('super-admin.performance.evaluations.destroy', $kpi))->assertSessionHasNoErrors();
+        $this->actingAs($this->superAdmin)->delete(route('super-admin.performance.evaluations.destroy', $kpi))->assertSessionHasErrors('kpi');
+        $this->assertModelExists($kpi);
 
-        $this->assertModelMissing($kpi);
-        $this->assertNull($reward->fresh()->kpi_id);
+        $plain = KpiRecord::create(['contractor_id' => $employee->id, 'kpi_score' => 80, 'evaluated_at' => now()]);
+        $this->actingAs($this->superAdmin)->delete(route('super-admin.performance.evaluations.destroy', $plain))->assertSessionHasNoErrors();
+        $this->assertModelMissing($plain);
     }
 }

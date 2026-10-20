@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\SuperAdmin;
 
+use App\Enums\CashAdvanceStatus;
 use App\Enums\PayrollPeriodStatus;
 use App\Enums\PayrollStatus;
 use App\Models\CashAdvance;
+use App\Models\CashAdvanceRepayment;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\User;
@@ -56,12 +58,15 @@ class ReportsTest extends TestCase
         $period = PayrollPeriod::factory()->create(['status' => PayrollPeriodStatus::Released]);
         $employee = User::factory()->create(['name' => 'Christian Mae']);
 
-        Payroll::factory()->for($employee, 'employee')->for($period, 'period')->create([
-            'gross_pay' => 10000, 'additional_pay' => 500, 'overtime_amount' => 0,
-            'absence_deduction' => 0, 'late_deduction' => 200, 'cash_advance_deduction' => 1000,
-            'device_deduction' => 0, 'other_deductions' => 0, 'net_pay' => 9300,
+        $row = Payroll::factory()->for($employee, 'employee')->for($period, 'period')->create([
+            'gross_pay' => 10000, 'additional_pay' => 500,
+            'absence_deduction' => 0, 'late_deduction' => 200, 'other_deductions' => 0,
             'status' => PayrollStatus::Released,
         ]);
+
+        // The cash advance deduction is a repayment linked to the row; net pay is worked out (9,300).
+        $advance = CashAdvance::factory()->create(['contractor_id' => $employee->id, 'amount' => 1000, 'status' => CashAdvanceStatus::Approved]);
+        CashAdvanceRepayment::query()->create(['advance_id' => $advance->id, 'payroll_id' => $row->id, 'amount' => 1000, 'repayment_date' => '2026-09-30']);
 
         $this->actingAs($this->superAdmin)
             ->get(route('super-admin.reports.show', ['report' => 'payroll', 'from' => '2026-09-11', 'to' => '2026-09-25']))

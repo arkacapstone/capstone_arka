@@ -17,7 +17,8 @@ class DevotionalFactory extends Factory
     public function definition(): array
     {
         return [
-            'employee_id' => User::factory(),
+            // contractor_id is the user's id; employee_id is another name for it.
+            'contractor_id' => fn (array $attributes) => $attributes['employee_id'] ?? User::factory(),
             'date' => today()->toDateString(),
             'title' => fake()->sentence(3),
             'file_path' => 'devotionals/'.fake()->uuid().'.pdf',

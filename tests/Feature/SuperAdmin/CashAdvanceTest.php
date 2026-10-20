@@ -47,10 +47,10 @@ class CashAdvanceTest extends TestCase
         $employee = $this->contractorBeforePayday();
 
         $this->actingAs($employee)
-            ->post(route('employee.cash-advances.store'), ['amount' => 2500, 'reason' => 'Laptop repair'])
+            ->post(route('employee.cash-advances.store'), ['repayment_months' => 2, 'amount' => 2500, 'reason' => 'Laptop repair'])
             ->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('cash_advances', ['employee_id' => $employee->id, 'amount' => 2500, 'status' => 'pending']);
+        $this->assertDatabaseHas('cash_advances', ['contractor_id' => $employee->id, 'amount' => 2500, 'status' => 'pending']);
         Notification::assertSentTo($this->superAdmin, CashAdvanceRequested::class);
 
         $this->actingAs($employee)
@@ -66,7 +66,7 @@ class CashAdvanceTest extends TestCase
     {
         // Up to the ₱20,000 gross pay for the period.
         $this->actingAs($this->contractorBeforePayday())
-            ->post(route('employee.cash-advances.store'), ['amount' => 20000.01, 'reason' => 'Too much'])
+            ->post(route('employee.cash-advances.store'), ['repayment_months' => 2, 'amount' => 20000.01, 'reason' => 'Too much'])
             ->assertSessionHasErrors('amount');
 
         $this->assertDatabaseCount('cash_advances', 0);
@@ -85,7 +85,7 @@ class CashAdvanceTest extends TestCase
     public function test_the_super_admin_lists_pending_requests_and_approves_one(): void
     {
         Notification::fake();
-        $advance = CashAdvance::factory()->create(['amount' => 4000, 'remaining_balance' => 4000]);
+        $advance = CashAdvance::factory()->create(['amount' => 4000]);
 
         // Cash advances are a tab of Requests & Approvals; the old address leads there.
         $this->actingAs($this->superAdmin)

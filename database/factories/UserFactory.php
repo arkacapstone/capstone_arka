@@ -5,6 +5,9 @@ namespace Database\Factories;
 use App\Enums\EmploymentType;
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
+use App\Models\Client;
+use App\Models\ClientAssignment;
+use App\Models\HomeOffice;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -34,7 +37,6 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'role' => UserRole::Employee,
-            'employment_type' => EmploymentType::FullTime,
             'status' => UserStatus::Active->value,
             'profile_completed_at' => now(),
             'remember_token' => Str::random(10),
@@ -51,11 +53,16 @@ class UserFactory extends Factory
         ]);
     }
 
+    /**
+     * A home office has one Super Admin, so another Super Admin gets a home office of their own.
+     */
     public function superAdmin(): static
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::SuperAdmin,
-            'employment_type' => null,
+            'home_office_id' => fn () => User::query()->where('role', UserRole::SuperAdmin)->where('home_office_id', HomeOffice::currentId())->exists()
+                ? HomeOffice::query()->create(['name' => 'Home Office '.Str::random(8)])->id
+                : HomeOffice::currentId(),
         ]);
     }
 
@@ -63,15 +70,20 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => UserRole::Admin,
-            'employment_type' => null,
         ]);
     }
 
+    /**
+     * Full-Time / Part-Time follows the contractor's clients, so this gives them a Part-Time client.
+     */
     public function partTime(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->afterCreating(fn (User $user) => ClientAssignment::query()->create([
+            'contractor_id' => $user->id,
+            'client_id' => Client::factory()->create()->id,
             'employment_type' => EmploymentType::PartTime,
-        ]);
+            'start_date' => now()->toDateString(),
+        ]));
     }
 
     /**

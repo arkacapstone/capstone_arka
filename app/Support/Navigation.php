@@ -55,6 +55,8 @@ class Navigation
 
         return [
             ...$modules,
+            // Every role, in every view: the home office's community chat.
+            ['key' => 'community', 'label' => 'Community Chat', 'href' => route('community.index'), 'routeName' => 'community.index'],
             ['key' => 'profile', 'label' => 'Profile', 'href' => route('profile.edit'), 'routeName' => 'profile.edit', 'match' => 'profile.*'],
         ];
     }

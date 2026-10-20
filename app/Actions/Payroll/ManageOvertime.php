@@ -32,12 +32,13 @@ class ManageOvertime
      */
     public function file(User $contractor, array $details): OvertimeRequest
     {
-        if (! $contractor->currentRates()->where('client_id', $details['client_id'])->exists()) {
+        if (! $contractor->currentRates()->forClient($details['client_id'])->exists()) {
             throw ValidationException::withMessages(['client_id' => 'Overtime can only be filed for a client you are assigned to.']);
         }
 
-        $ticket = $contractor->overtimeRequests()->create([...$details, 'status' => OvertimeRequest::STATUS_PENDING]);
-        $ticket->load('client:id,client_name');
+        // The ticket points to the contractor's assignment for that client.
+        $ticket = OvertimeRequest::query()->create([...$details, 'employee_id' => $contractor->id, 'status' => OvertimeRequest::STATUS_PENDING]);
+        $ticket->load('client:clients.id,client_name');
 
         $this->activity->log('payroll', 'Filed overtime ticket', $ticket, "{$contractor->name} · {$ticket->client->client_name} · {$ticket->date->toDateString()} · {$ticket->duration()}");
         $this->notifier->superAdmins(new OvertimeRequested($ticket));
@@ -51,8 +52,7 @@ class ManageOvertime
     public static function amountFor(OvertimeRequest $ticket): float
     {
         $rate = Rate::query()
-            ->where('employee_id', $ticket->employee_id)
-            ->where('client_id', $ticket->client_id)
+            ->where('assignment_id', $ticket->assignment_id)
             ->whereDate('effective_date', '<=', $ticket->date)
             ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $ticket->date))
             ->latest('effective_date')
@@ -110,8 +110,7 @@ class ManageOvertime
     {
         $row = Payroll::query()
             ->with(['period', 'rate'])
-            ->where('employee_id', $ticket->employee_id)
-            ->where('client_id', $ticket->client_id)
+            ->where('assignment_id', $ticket->assignment_id)
             ->whereHas('period', fn ($query) => $query->whereDate('end_date', '>=', $ticket->date))
             ->get()
             ->filter(fn (Payroll $row) => $row->period->status->allowsAdjustments())
@@ -132,7 +131,7 @@ class ManageOvertime
 
     private function decided(OvertimeRequest $ticket, string $action): OvertimeRequest
     {
-        $ticket->loadMissing('employee', 'client:id,client_name');
+        $ticket->loadMissing('employee', 'client:clients.id,client_name');
         $this->activity->log('payroll', $action, $ticket, "{$ticket->employee->name} · {$ticket->client->client_name} · {$ticket->duration()}");
         $ticket->employee->notify(new OvertimeDecided($ticket));
 

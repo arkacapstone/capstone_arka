@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Weekday;
+use App\Models\Concerns\BelongsToAssignment;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A client-specific work schedule for one employee (Blueprint §6).
@@ -19,10 +20,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A change never erases a schedule: it ends the current one and starts a new
  * applicable period, so attendance is always compared with the schedule in effect that day.
  */
-#[Fillable(['employee_id', 'client_id', 'work_schedule_id', 'job_position', 'working_days', 'start_time', 'end_time', 'start_date', 'end_date', 'status'])]
+#[Fillable(['assignment_id', 'employee_id', 'client_id', 'work_schedule_id', 'job_position', 'working_days', 'start_time', 'end_time', 'start_date', 'end_date', 'status'])]
 class Schedule extends Model
 {
-    use HasFactory;
+    use BelongsToAssignment, HasFactory;
+
+    /**
+     * Working days set on the schedule, written to schedule_days when it is saved.
+     *
+     * @var list<string>|null
+     */
+    protected ?array $pendingWorkingDays = null;
 
     /**
      * Most working days a contractor can be scheduled for in a week, across all their clients.
@@ -43,10 +51,65 @@ class Schedule extends Model
     protected function casts(): array
     {
         return [
-            'working_days' => 'array',
             'start_date' => 'immutable_date',
             'end_date' => 'immutable_date',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (Schedule $schedule) {
+            if ($schedule->pendingWorkingDays === null) {
+                return;
+            }
+
+            $schedule->days()->delete();
+            $schedule->days()->insert(array_map(
+                fn (string $day) => ['schedule_id' => $schedule->id, 'day_of_week' => Weekday::from($day)->isoNumber()],
+                $schedule->pendingWorkingDays,
+            ));
+            $schedule->pendingWorkingDays = null;
+            $schedule->unsetRelation('days');
+        });
+    }
+
+    /**
+     * The days of the week this schedule covers, one row each.
+     *
+     * @return HasMany<ScheduleDay, $this>
+     */
+    public function days(): HasMany
+    {
+        return $this->hasMany(ScheduleDay::class);
+    }
+
+    /**
+     * The schedule's days as ['mon', 'tue', …], read from schedule_days (Monday first).
+     */
+    protected function workingDays(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->pendingWorkingDays ?? $this->days
+                ->sortBy('day_of_week')
+                ->map(fn (ScheduleDay $day) => Weekday::fromIsoNumber((int) $day->day_of_week)->value)
+                ->values()
+                ->all(),
+            set: function ($value) {
+                $this->pendingWorkingDays = array_values(array_unique(is_string($value) ? json_decode($value, true) : (array) $value));
+                $this->unsetRelation('days');
+
+                return [];
+            },
+        );
+    }
+
+    /**
+     * Schedules that cover this day of the week ('mon', 'tue', …).
+     */
+    #[Scope]
+    protected function onWeekday(Builder $query, string $day): void
+    {
+        $query->whereHas('days', fn (Builder $days) => $days->where('day_of_week', Weekday::from($day)->isoNumber()));
     }
 
     /**
@@ -67,26 +130,10 @@ class Schedule extends Model
         return strlen($value) === 5 ? "{$value}:00" : $value;
     }
 
-    /**
-     * @return BelongsTo<User, $this>
-     */
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'employee_id');
-    }
-
-    /**
-     * @return BelongsTo<Client, $this>
-     */
-    public function client(): BelongsTo
-    {
-        return $this->belongsTo(Client::class);
-    }
-
     #[Scope]
     protected function active(Builder $query): void
     {
-        $query->where('status', self::STATUS_ACTIVE);
+        $query->where($this->qualifyColumn('status'), self::STATUS_ACTIVE);
     }
 
     /**
@@ -95,8 +142,8 @@ class Schedule extends Model
     #[Scope]
     protected function applicableOn(Builder $query, CarbonInterface $date): void
     {
-        $query->whereDate('start_date', '<=', $date)
-            ->where(fn (Builder $query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $date));
+        $query->whereDate($this->qualifyColumn('start_date'), '<=', $date)
+            ->where(fn (Builder $query) => $query->whereNull($this->qualifyColumn('end_date'))->orWhereDate($this->qualifyColumn('end_date'), '>=', $date));
     }
 
     public function worksOn(CarbonInterface $date): bool

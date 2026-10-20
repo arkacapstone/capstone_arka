@@ -9,6 +9,7 @@ use App\Enums\PayFrequency;
 use App\Models\Attendance;
 use App\Models\CashAdvance;
 use App\Models\Client;
+use App\Models\KpiRecord;
 use App\Models\OvertimeRequest;
 use App\Models\PayrollPeriod;
 use App\Models\Rate;
@@ -16,6 +17,7 @@ use App\Models\Reward;
 use App\Models\User;
 use App\Services\Payroll\PayrollCalculator;
 use App\Services\Payslips\EmployeePayslips;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -70,7 +72,8 @@ class PayrollScenarioReferenceTest extends TestCase
         foreach (array_slice(self::DAYS, 0, $days) as $index => $date) {
             Attendance::factory()->for($contractor, 'employee')->for($client)->create([
                 'date' => $date,
-                'actual_hours' => $hoursPerDay,
+                'time_in' => "{$date} 08:00:00",
+                'time_out' => CarbonImmutable::parse("{$date} 08:00:00")->addMinutes((int) round($hoursPerDay * 60)),
                 ...($index === 0 ? $firstDay : []),
             ]);
         }
@@ -95,7 +98,7 @@ class PayrollScenarioReferenceTest extends TestCase
     {
         CashAdvance::factory()->for($contractor, 'employee')->create([
             'amount' => $amount,
-            'remaining_balance' => $amount,
+            'repayment_months' => 2,
             'status' => CashAdvanceStatus::Approved,
             'released_date' => '2026-09-20',
         ]);
@@ -109,7 +112,7 @@ class PayrollScenarioReferenceTest extends TestCase
         app(PayrollCalculator::class)->calculate($this->period);
 
         return app(EmployeePayslips::class)->present(
-            $this->period->payrolls()->where('employee_id', $contractor->id)->with(['period', 'client', 'rate'])->get(),
+            $this->period->payrolls()->forEmployee($contractor->id)->withAmounts()->with(['period', 'client', 'rate', 'rewards'])->get(),
             preview: true,
         );
     }
@@ -195,8 +198,9 @@ class PayrollScenarioReferenceTest extends TestCase
         $contractor = User::factory()->create();
         $fullTime = $this->client($contractor, 'Aurora Dental', EmploymentType::FullTime, 8000);
         $this->worked($contractor, $fullTime, 10, 8);
-        Reward::create(['employee_id' => $contractor->id, 'reward_type' => 'Bonus', 'amount' => 500, 'description' => 'Top KPI for September', 'awarded_by' => $this->superAdmin->id, 'awarded_at' => '2026-09-22 10:00:00']);
-        Reward::create(['employee_id' => $contractor->id, 'reward_type' => 'Recognition', 'amount' => null, 'awarded_by' => $this->superAdmin->id, 'awarded_at' => '2026-09-22 10:00:00']);
+        $kpi = KpiRecord::query()->create(['contractor_id' => $contractor->id, 'period_id' => $this->period->id, 'kpi_score' => 95, 'evaluated_by' => $this->superAdmin->id, 'evaluated_at' => '2026-09-22 09:00:00']);
+        Reward::create(['kpi_id' => $kpi->id, 'reward_type' => Reward::CASH, 'amount' => 500, 'description' => 'Bonus — Top KPI for September', 'awarded_by' => $this->superAdmin->id, 'awarded_at' => '2026-09-22 10:00:00']);
+        Reward::create(['kpi_id' => $kpi->id, 'reward_type' => Reward::NON_CASH, 'amount' => null, 'description' => 'Recognition', 'awarded_by' => $this->superAdmin->id, 'awarded_at' => '2026-09-22 10:00:00']);
 
         $payslip = $this->payslip($contractor);
 
@@ -254,10 +258,10 @@ class PayrollScenarioReferenceTest extends TestCase
 
         $this->assertSame([
             'Late / Undertime' => 43.75, // 0.5 h × ₱87.50
-            'Cash Advance Repayment' => 500.0,
+            'Cash Advance Repayment' => 125.0, // first of 4 installments: 500 over 2 months of semi-monthly paydays
         ], $this->lines($payslip['deductions']));
-        $this->assertSame(543.75, $payslip['deductionsTotal']);
-        $this->assertSame(6456.25, $payslip['net']);
+        $this->assertSame(168.75, $payslip['deductionsTotal']);
+        $this->assertSame(6831.25, $payslip['net']);
     }
 
     public function test_person_f_extra_part_time_hours_overtime_absences_lateness_and_a_cash_advance(): void
@@ -283,11 +287,11 @@ class PayrollScenarioReferenceTest extends TestCase
         $this->assertSame([
             'Absences' => 1600.0,          // 2 days × ₱800.00
             'Late / Undertime' => 8.33,    // 5 min × ₱100.00/h
-            'Cash Advance Repayment' => 1000.0,
+            'Cash Advance Repayment' => 250.0, // first of 4 installments of 1,000
         ], $this->lines($payslip['deductions']));
         $this->assertSame('2 days', $payslip['deductions'][0]['detail']);
-        $this->assertSame(2608.33, $payslip['deductionsTotal']);
+        $this->assertSame(1858.33, $payslip['deductionsTotal']);
 
-        $this->assertSame(10021.67, $payslip['net']);
+        $this->assertSame(10771.67, $payslip['net']);
     }
 }

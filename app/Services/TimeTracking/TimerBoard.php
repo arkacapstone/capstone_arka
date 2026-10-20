@@ -45,14 +45,14 @@ class TimerBoard
 
         // Today's sessions, plus any timer still open from an earlier day (e.g. an overnight shift).
         $logs = $employee->timeLogs()
-            ->with('client:id,client_name')
+            ->with('client:clients.id,client_name')
             ->where(fn ($query) => $query->whereDate('date', '>=', $now->subDay()->toDateString())->orWhereNull('time_out'))
             ->orderBy('time_in')
             ->get();
 
         // Finished sessions already in a locked or released payroll no longer count on the timers.
         $counted = $logs->reject(fn (TimeLog $log) => $this->paidOut($log));
-        $rates = $employee->currentRates()->get(['client_id', 'employment_type'])->keyBy('client_id');
+        $rates = $employee->currentRates()->with('assignment')->get()->keyBy('client_id');
 
         $cards = $clients->map(fn (array $row) => $this->card($employee, $row, $counted, $now, $rates->get($row['client']->id)))->values();
         $open = $logs->filter(fn (TimeLog $log) => $log->isOpen());

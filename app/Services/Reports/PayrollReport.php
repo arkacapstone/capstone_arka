@@ -28,7 +28,7 @@ class PayrollReport implements Report
     public function summaryRows(ReportFilters $filters): array
     {
         return self::rows($filters)
-            ->with('employee:id,name')
+            ->with('employee:users.id,name')
             ->get()
             ->groupBy('employee_id')
             ->map(fn ($rows) => [
@@ -52,7 +52,7 @@ class PayrollReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return self::rows($filters)
-            ->with(['employee:id,name', 'period:id,period_name,start_date', 'client:id,client_name'])
+            ->with(['employee:users.id,name', 'period:id,period_name,start_date', 'client:clients.id,client_name'])
             ->get()
             ->sortBy([fn (Payroll $a, Payroll $b) => $a->period->start_date <=> $b->period->start_date, fn (Payroll $a, Payroll $b) => $a->employee->name <=> $b->employee->name])
             ->map(fn (Payroll $row) => [
@@ -76,11 +76,14 @@ class PayrollReport implements Report
      */
     public static function rows(ReportFilters $filters): Builder
     {
+        // Overtime, rewards, cash advance and device amounts are summed from their own tables.
         return Payroll::query()
+            ->withAmounts()
+            ->with(['assignment', 'rate'])
             ->whereHas('period', fn (Builder $query) => $query
                 ->whereDate('start_date', '<=', $filters->to)
                 ->whereDate('end_date', '>=', $filters->from))
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->forEmployee($id))
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status));
     }
 

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
 use App\Models\AttendanceVerification;
+use App\Models\ClientAssignment;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use App\Services\Attendance\AttendanceLock;
@@ -36,11 +37,11 @@ class AttendanceController extends Controller
         $month = isset($filters['month']) ? CarbonImmutable::createFromFormat('Y-m-d', "{$filters['month']}-01")->startOfDay() : CarbonImmutable::today()->startOfMonth();
 
         $records = $user->attendances()
-            ->with(['client:id,client_name', 'schedule', 'leaveType:id,leave_type_name'])
+            ->with(['client:clients.id,client_name', 'assignmentTimeLogs', 'leaveRequest.leaveType:id,leave_type_name'])
             ->whereDate('date', '>=', $month->startOfMonth())
             ->whereDate('date', '<=', $month->endOfMonth())
             ->orderByDesc('date')
-            ->orderBy('client_id')
+            ->orderBy('attendances.assignment_id')
             ->get()
             ->map(fn (Attendance $attendance) => [
                 'id' => $attendance->id,
@@ -70,7 +71,7 @@ class AttendanceController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'attendance_id' => ['required', 'integer', Rule::exists(Attendance::class, 'id')->where('employee_id', $user->id)],
+            'attendance_id' => ['required', 'integer', Rule::exists(Attendance::class, 'id')->whereIn('assignment_id', ClientAssignment::idsFor($user->id)->pluck('id')->all())],
             'time_in' => ['nullable', 'required_without:time_out', 'date_format:H:i'],
             'time_out' => ['nullable', 'required_without:time_in', 'date_format:H:i'],
             'reason' => ['required', 'string', 'max:500'],
@@ -102,9 +103,9 @@ class AttendanceController extends Controller
         }
 
         $verification = AttendanceVerification::query()
-            ->with('corrections.attendance.client:id,client_name')
+            ->with('corrections.client:clients.id,client_name')
             ->where('period_id', $period->id)
-            ->where('employee_id', $user->id)
+            ->where('contractor_id', $user->id)
             ->first();
 
         return [
@@ -120,11 +121,11 @@ class AttendanceController extends Controller
             'fixDeadline' => $period->fixDeadline()?->toIso8601String(),
             'fixes' => $verification?->corrections->map(fn (AttendanceCorrection $correction) => FixHistory::present($correction))->all() ?? [],
             'records' => $user->attendances()
-                ->with('client:id,client_name')
+                ->with(['client:clients.id,client_name', 'assignmentTimeLogs'])
                 ->whereDate('date', '>=', $period->start_date)
                 ->whereDate('date', '<=', $period->end_date)
                 ->orderBy('date')
-                ->orderBy('client_id')
+                ->orderBy('attendances.assignment_id')
                 ->get()
                 ->map(fn (Attendance $attendance) => [
                     'id' => $attendance->id,

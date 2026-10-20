@@ -17,7 +17,6 @@ class ClientFactory extends Factory
     {
         return [
             'client_name' => fake()->company(),
-            'client_code' => 'CL-'.fake()->unique()->numerify('####'),
             'is_active' => true,
         ];
     }

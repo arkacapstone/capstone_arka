@@ -13,14 +13,14 @@ class RewardGranted extends ArkaNotification
 
     protected function title(object $notifiable): string
     {
-        return "You received a reward: {$this->reward->reward_type}";
+        return "You received a reward: {$this->reward->kind()}";
     }
 
     protected function message(object $notifiable): string
     {
         $amount = $this->reward->amount ? ' of ₱'.number_format((float) $this->reward->amount, 2) : '';
 
-        return trim("Congratulations! A {$this->reward->reward_type}{$amount} was recorded for you. {$this->reward->description}");
+        return trim("Congratulations! A {$this->reward->kind()}{$amount} was recorded for you. {$this->reward->note()}");
     }
 
     protected function category(): string

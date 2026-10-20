@@ -30,7 +30,8 @@ class EmployeeManagementTest extends TestCase
     {
         $client = Client::factory()->create(['client_name' => 'Acme']);
         $employee = User::factory()->create();
-        Rate::factory()->for($employee, 'employee')->for($client)->create();
+        // Full-Time / Part-Time follows the contractor's client assignment.
+        Rate::factory()->for($employee, 'employee')->for($client)->create(['employment_type' => EmploymentType::FullTime]);
         User::factory()->partTime()->create();
         User::factory()->admin()->create();
 

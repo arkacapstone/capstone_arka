@@ -62,7 +62,7 @@ enum SuperAdminModule: string
             self::Payslips => ['Payslip generation', 'Current payslips', 'Previous payslips', 'Payslip records'],
             self::Requests => ['Leave requests', 'Financial/workforce requests', 'Cash advance requests and repayment tracking', 'Approval / rejection', 'Request history'],
             self::Performance => ['KPI records', 'KPI evaluation', 'Performance results', 'Rewards / incentives', 'Reward history'],
-            self::Rules => ['Payroll rules', 'Administrative deduction rules', 'Device loss/damage rules', 'Payroll cutoff settings', 'Payroll release settings', 'Basic system configuration'],
+            self::Rules => ['Payroll rules', 'Administrative deduction rules', 'Device loss/damage rules', 'Payroll cutoff settings', 'Payroll release settings', 'Home Offices'],
             self::Reports => ['Attendance', 'Devotional', 'Payroll', 'Payslip', 'Leave', 'Workforce', 'Schedule', 'Cash advance', 'Performance / KPI', 'Deduction', 'Device', 'PDF generation', 'CSV export'],
             self::Notifications => ['Approval notifications', 'Payroll notifications', 'Request notifications', 'System alerts', 'Announcements'],
             self::ActivityLogs => ['Login records', 'Account changes', 'Attendance changes', 'Payroll changes', 'Approval history', 'Important system actions'],

@@ -28,8 +28,8 @@ class PerformanceReport implements Report
 
     public function summaryRows(ReportFilters $filters): array
     {
-        $evaluations = $this->evaluations($filters)->with('employee:id,name')->get()->groupBy('employee_id');
-        $rewards = $this->rewards($filters)->with('employee:id,name')->get()->groupBy('employee_id');
+        $evaluations = $this->evaluations($filters)->with('employee:users.id,name')->get()->groupBy('employee_id');
+        $rewards = $this->rewards($filters)->with(['kpi', 'employee:users.id,name'])->get()->groupBy('employee_id');
 
         return $evaluations->keys()->merge($rewards->keys())->unique()
             ->map(function (int $employeeId) use ($evaluations, $rewards) {
@@ -58,7 +58,7 @@ class PerformanceReport implements Report
 
     public function detailRows(ReportFilters $filters): array
     {
-        $evaluations = $this->evaluations($filters)->with(['employee:id,name', 'period:id,period_name'])->get()
+        $evaluations = $this->evaluations($filters)->with(['employee:users.id,name', 'period:id,period_name'])->get()
             ->map(fn (KpiRecord $record) => [
                 $record->employee->name,
                 $record->evaluated_at?->toDateString(),
@@ -68,14 +68,14 @@ class PerformanceReport implements Report
                 $record->remarks,
             ]);
 
-        $rewards = $this->rewards($filters)->with('employee:id,name')->get()
+        $rewards = $this->rewards($filters)->with(['kpi', 'employee:users.id,name'])->get()
             ->map(fn (Reward $reward) => [
                 $reward->employee->name,
                 $reward->awarded_at?->toDateString(),
                 'Reward',
-                $reward->reward_type,
+                $reward->kind(),
                 $reward->amount !== null ? (float) $reward->amount : null,
-                $reward->description,
+                $reward->note(),
             ]);
 
         return $evaluations->concat($rewards)->sortBy([[1, 'asc'], [0, 'asc']])->values()->all();
@@ -89,7 +89,7 @@ class PerformanceReport implements Report
         return KpiRecord::query()
             ->whereDate('evaluated_at', '>=', $filters->from)
             ->whereDate('evaluated_at', '<=', $filters->to)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id));
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('contractor_id', $id));
     }
 
     /**
@@ -100,6 +100,6 @@ class PerformanceReport implements Report
         return Reward::query()
             ->whereDate('awarded_at', '>=', $filters->from)
             ->whereDate('awarded_at', '<=', $filters->to)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id));
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->forEmployee($id));
     }
 }

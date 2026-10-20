@@ -7,6 +7,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\DeviceAssignment;
+use App\Models\HomeOffice;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -31,11 +32,11 @@ class DeviceController extends Controller
         ]);
 
         $devices = Device::query()
-            ->with(['currentAssignment.employee:id,name,employee_code', 'assignments' => fn ($query) => $query->where('status', DeviceAssignment::STATUS_LOST)->with('employee:id,name', 'deduction.payroll:id,status')])
+            ->with(['currentAssignment.employee:users.id,name,employee_code', 'assignments' => fn ($query) => $query->where('end_reason', DeviceAssignment::STATUS_LOST)->with('employee:users.id,name', 'deduction.payroll:id,status')])
             ->when($filters['search'] ?? null, fn (Builder $query, string $search) => $query->where(
                 fn (Builder $query) => $query->where('device_name', 'like', "%{$search}%")->orWhere('serial_number', 'like', "%{$search}%")->orWhere('device_type', 'like', "%{$search}%")
             ))
-            ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
+            ->when($filters['status'] ?? null, fn (Builder $query, string $status) => $query->withStatus($status))
             ->orderBy('device_name')
             ->orderBy('id')
             ->get()
@@ -67,9 +68,9 @@ class DeviceController extends Controller
             ],
             'counts' => [
                 'total' => Device::query()->count(),
-                'available' => Device::query()->where('status', Device::STATUS_AVAILABLE)->count(),
-                'assigned' => Device::query()->where('status', Device::STATUS_ASSIGNED)->count(),
-                'lost' => Device::query()->where('status', Device::STATUS_LOST)->count(),
+                'available' => Device::query()->withStatus(Device::STATUS_AVAILABLE)->count(),
+                'assigned' => Device::query()->withStatus(Device::STATUS_ASSIGNED)->count(),
+                'lost' => Device::query()->withStatus(Device::STATUS_LOST)->count(),
             ],
             'contractors' => User::query()->workforce()->active()->orderBy('name')->get(['id', 'name', 'employee_code'])
                 ->map(fn (User $user) => ['value' => $user->id, 'label' => "{$user->name} ({$user->employee_code})"])->all(),
@@ -82,7 +83,7 @@ class DeviceController extends Controller
         $device = $this->validateDevice($request);
         // Optionally hand it to a contractor right away.
         $assignment = $request->validate([
-            'employee_id' => ['nullable', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
+            'employee_id' => ['nullable', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'assigned_date' => ['nullable', 'required_with:employee_id', 'date'],
         ], attributes: ['employee_id' => 'contractor', 'assigned_date' => 'given on']);
 
@@ -109,7 +110,7 @@ class DeviceController extends Controller
     public function assign(Request $request, Device $device, ManageDevices $manage): RedirectResponse
     {
         $validated = $request->validate([
-            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
+            'employee_id' => ['required', 'integer', Rule::exists(User::class, 'id')->where('home_office_id', HomeOffice::currentId())->whereIn('role', UserRole::workforceValues())->where('status', 'active')],
             'assigned_date' => ['required', 'date'],
         ], attributes: ['employee_id' => 'contractor', 'assigned_date' => 'assigned date']);
 
@@ -142,7 +143,7 @@ class DeviceController extends Controller
         return $request->validate([
             'device_name' => ['required', 'string', 'max:255'],
             'device_type' => ['required', Rule::in(Device::TYPES)],
-            'serial_number' => ['nullable', 'string', 'max:255', Rule::unique(Device::class)->ignore($device)],
+            'serial_number' => ['nullable', 'string', 'max:255', Rule::unique(Device::class)->where('home_office_id', HomeOffice::currentId())->ignore($device)],
             'value' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
         ], attributes: ['device_name' => 'device name', 'device_type' => 'type', 'serial_number' => 'serial number']);
     }

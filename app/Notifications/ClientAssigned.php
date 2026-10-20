@@ -18,7 +18,7 @@ class ClientAssigned extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->rate->loadMissing('client:id,client_name');
+        $this->rate->loadMissing('client:clients.id,client_name');
 
         return "You're assigned to {$this->rate->client->client_name} from {$this->rate->effective_date->format('M j, Y')}. Your schedule for this client comes next.";
     }

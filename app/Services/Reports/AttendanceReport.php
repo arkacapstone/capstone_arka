@@ -26,8 +26,8 @@ class AttendanceReport implements Report
     public function summaryRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with('employee:id,name')
-            ->get(['id', 'employee_id', 'status'])
+            ->with(['assignment', 'employee:users.id,name'])
+            ->get(['id', 'assignment_id', 'status'])
             ->groupBy('employee_id')
             ->map(function ($records) {
                 $count = fn (AttendanceStatus ...$statuses) => $records->filter(fn (Attendance $row) => in_array($row->status, $statuses, true))->count();
@@ -55,7 +55,7 @@ class AttendanceReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with(['employee:id,name', 'client:id,client_name'])
+            ->with(['employee:users.id,name', 'client:clients.id,client_name', 'assignmentTimeLogs'])
             ->orderBy('date')
             ->orderBy('id')
             ->get()
@@ -80,7 +80,7 @@ class AttendanceReport implements Report
         return Attendance::query()
             ->whereDate('date', '>=', $filters->from)
             ->whereDate('date', '<=', $filters->to)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->forEmployee($id))
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status));
     }
 }

@@ -32,8 +32,7 @@ class SyncAttendance
         }
 
         $logs = TimeLog::query()
-            ->where('employee_id', $employeeId)
-            ->where('client_id', $clientId)
+            ->forPair($employeeId, $clientId)
             ->whereDate('date', $date)
             ->orderBy('time_in')
             ->get();
@@ -43,8 +42,7 @@ class SyncAttendance
         }
 
         $attendance = Attendance::query()
-            ->where('employee_id', $employeeId)
-            ->where('client_id', $clientId)
+            ->forPair($employeeId, $clientId)
             ->whereDate('date', $date)
             ->first() ?? new Attendance(['employee_id' => $employeeId, 'client_id' => $clientId, 'date' => $date]);
 
@@ -73,13 +71,9 @@ class SyncAttendance
             }) / 3600, 2);
         }
 
-        $attendance->fill([
-            'schedule_id' => $schedule?->id,
-            'time_in' => $timeIn,
-            'time_out' => $timeOut,
-            'break_minutes' => $breakMinutes,
-            ...$values,
-        ])->save();
+        // Time in/out, break and hours are not saved on attendance: they are read from these time logs.
+        unset($values['actual_hours']);
+        $attendance->fill($values)->save();
 
         return $attendance;
     }

@@ -19,7 +19,7 @@ class ScheduleOverlapDetected extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->schedule->loadMissing('employee:id,name', 'client:id,client_name');
+        $this->schedule->loadMissing('employee:users.id,name', 'client:clients.id,client_name');
         $count = $this->overlaps === 1 ? 'another schedule' : "{$this->overlaps} other schedules";
 
         return "{$this->schedule->employee->name}'s {$this->schedule->client->client_name} schedule overlaps {$count}. Check that it's intentional.";

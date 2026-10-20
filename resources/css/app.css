@@ -48,6 +48,14 @@
         @apply bg-console-bg;
     }
 
+    /* A dropdown's list is drawn by the browser with a white background, but its options inherit
+       the select's text color (light in dark mode), so they were unreadable. Give the list the
+       panel color and normal text in every theme. */
+    select option {
+        background-color: rgb(var(--console-panel));
+        color: rgb(var(--console-text));
+    }
+
     /* Text fields with suggestions (e.g. Client name) stay plain inputs: hide the browser's ▼ arrow.
        The suggestions still appear while typing. */
     input[list]::-webkit-calendar-picker-indicator {

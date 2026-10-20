@@ -50,11 +50,11 @@ export function IssuedInvitation() {
 
     if (!invitation || dismissed) return null;
 
-    const details = [
-        `Username: ${invitation.email}`,
-        `Default password: ${invitation.defaultPassword}`,
-        `Verify email & log in: ${invitation.url}`,
-    ].join('\n');
+    // A password reset only needs the login page; an invite must verify the email first.
+    const reset = invitation.kind === 'reset';
+    const linkLabel = reset ? 'Log in' : 'Verify email & log in';
+
+    const details = [`Username: ${invitation.email}`, `Default password: ${invitation.defaultPassword}`, `${linkLabel}: ${invitation.url}`].join('\n');
 
     const copy = async () => {
         try {
@@ -78,11 +78,13 @@ export function IssuedInvitation() {
                         <dd className="select-all break-all font-mono text-console-text">{invitation.email}</dd>
                         <dt className="text-console-muted">Default password</dt>
                         <dd className="select-all break-all font-mono text-console-text">{invitation.defaultPassword}</dd>
-                        <dt className="text-console-muted">Verify link</dt>
+                        <dt className="text-console-muted">{reset ? 'Login page' : 'Verify link'}</dt>
                         <dd className="select-all break-all font-mono text-console-text">{invitation.url}</dd>
                     </dl>
                     <p className="mt-3 text-xs text-console-dim">
-                        The email to {invitation.email} didn't go through. Share these privately. They open the verify link first, then log in. The link works once and expires in 7 days.
+                        {reset
+                            ? `The email to ${invitation.email} didn't go through. Share these privately. They log in with the default password, then create their own.`
+                            : `The email to ${invitation.email} didn't go through. Share these privately. They open the verify link first, then log in. The link works once and expires in 7 days.`}
                     </p>
                 </div>
                 <div className="flex gap-2">

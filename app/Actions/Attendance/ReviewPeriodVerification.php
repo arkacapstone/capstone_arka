@@ -36,7 +36,7 @@ class ReviewPeriodVerification
      */
     public static function notSubmitted(PayrollPeriod $period): Collection
     {
-        $submitted = $period->verifications()->whereNotNull('verified_at')->pluck('employee_id');
+        $submitted = $period->verifications()->whereNotNull('verified_at')->pluck('contractor_id');
 
         return PayrollCalculator::employeesFor($period)->whereNotIn('id', $submitted)->values();
     }
@@ -102,19 +102,20 @@ class ReviewPeriodVerification
 
         $notSubmitted = self::notSubmitted($period);
 
-        DB::transaction(function () use ($admin, $period, $notSubmitted) {
-            $period->update(['admin_submitted_at' => now(), 'admin_submitted_by' => $admin->id]);
+        DB::transaction(function () use ($period, $notSubmitted) {
+            // Who submitted is read from the activity log entry written below.
+            $period->update(['admin_submitted_at' => now()]);
 
             // Whoever never submitted is submitted with their attendance as recorded: not fixing it was their responsibility.
             foreach ($notSubmitted as $contractor) {
                 AttendanceVerification::query()->updateOrCreate(
-                    ['period_id' => $period->id, 'employee_id' => $contractor->id],
+                    ['period_id' => $period->id, 'contractor_id' => $contractor->id],
                     ['verified_at' => now(), 'auto_submitted' => true],
                 );
             }
         });
 
-        $this->activity->log('attendance', 'Submitted verified period to the Super Admin', $period, "{$period->period_name} · {$notSubmitted->count()} auto-submitted");
+        $this->activity->log('attendance', PayrollPeriod::SUBMITTED_ACTION, $period, "{$period->period_name} · {$notSubmitted->count()} auto-submitted");
         $this->notifier->superAdmins(new VerifiedPeriodSubmitted($period, $admin));
         Notification::send($notSubmitted, new AttendanceAutoSubmitted($period));
 

@@ -240,7 +240,7 @@ class PayrollManagementTest extends TestCase
     public function test_a_rate_change_during_the_period_is_one_row_paid_at_the_latest_rate(): void
     {
         // The rate for this client changes on Sep 18: the old one ends the day before.
-        Rate::query()->where('employee_id', $this->employee->id)->update(['end_date' => '2026-09-17']);
+        Rate::query()->forEmployee($this->employee->id)->update(['end_date' => '2026-09-17']);
         $newRate = Rate::factory()->for($this->employee, 'employee')->for($this->client)->create([
             'gross_pay' => 8800,
             'pay_frequency' => PayFrequency::SemiMonthly,
@@ -334,11 +334,11 @@ class PayrollManagementTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('payslips.0.status', 'available')->where('payslips.0.net', 8000));
     }
 
-    public function test_an_approved_cash_advance_is_deducted_from_the_employees_payroll_automatically(): void
+    public function test_an_approved_cash_advance_is_deducted_in_installments_automatically(): void
     {
         Notification::fake();
         $this->worked();
-        $advance = CashAdvance::factory()->for($this->employee, 'employee')->create(['amount' => 1500, 'remaining_balance' => 1500]);
+        $advance = CashAdvance::factory()->for($this->employee, 'employee')->create(['amount' => 1500, 'repayment_months' => 2]);
 
         // The employee filed it; the Super Admin only approves.
         $this->actingAs($this->superAdmin)->post(route('super-admin.cash-advances.approve', $advance))->assertSessionHasNoErrors();
@@ -346,15 +346,17 @@ class PayrollManagementTest extends TestCase
         $this->advance(); // verification
         $this->advance(); // locked: payroll calculated
 
-        $this->assertSame('1500.00', Payroll::sole()->cash_advance_deduction); // the full amount, all at once
-        $this->assertSame('6500.00', Payroll::sole()->net_pay);
+        // 1,500 over 2 months of semi-monthly paydays = 4 installments of 375.
+        $this->assertSame('375.00', Payroll::sole()->cash_advance_deduction);
+        $this->assertSame('7625.00', Payroll::sole()->net_pay);
 
         $this->advance(); // approved
-        $this->advance(); // released: the deduction becomes a repayment
+        $this->advance(); // released
 
+        // The installment is a repayment linked to the payroll line; the rest is owed on the next paydays.
         $advance->refresh();
-        $this->assertEquals(0, (float) $advance->remaining_balance);
-        $this->assertSame(CashAdvanceStatus::Repaid, $advance->status);
+        $this->assertSame('1125.00', $advance->remaining_balance);
+        $this->assertSame(CashAdvanceStatus::Approved, $advance->displayStatus());
         $this->assertNotNull($advance->repayments()->sole()->payroll_id);
     }
 
@@ -364,13 +366,13 @@ class PayrollManagementTest extends TestCase
     private function requestCashAdvance(float $amount, string $on = '2026-09-20 10:00:00'): TestResponse
     {
         $this->travelTo($on);
-        $response = $this->actingAs($this->employee)->post(route('employee.cash-advances.store'), ['amount' => $amount, 'reason' => 'Rent']);
+        $response = $this->actingAs($this->employee)->post(route('employee.cash-advances.store'), ['repayment_months' => 2, 'amount' => $amount, 'reason' => 'Rent']);
         $this->travelTo('2026-09-26 10:00:00');
 
         return $response;
     }
 
-    public function test_a_cash_advance_is_requested_during_the_period_up_to_the_gross_pay_and_repaid_on_its_payday(): void
+    public function test_a_cash_advance_is_requested_during_the_period_up_to_the_gross_pay_and_repaid_from_its_payday(): void
     {
         Notification::fake();
         $this->worked();
@@ -380,7 +382,7 @@ class PayrollManagementTest extends TestCase
         $this->requestCashAdvance(5000)->assertSessionHasNoErrors();
         $advance = CashAdvance::sole();
         $this->assertSame('2026-09-30', $advance->payday->toDateString());
-        $this->assertSame('8000.00', $advance->gross_pay);
+        $this->assertSame(2, $advance->repayment_months);
 
         $this->advance(); // verification
         $this->advance(); // locked: payroll calculated, before the advance is approved
@@ -391,15 +393,16 @@ class PayrollManagementTest extends TestCase
         $this->actingAs($this->superAdmin)->post(route('super-admin.cash-advances.approve', $advance), ['amount' => 3000])->assertSessionHasNoErrors();
         $this->assertSame('3000.00', $advance->fresh()->amount);
         $this->assertSame('5000.00', $advance->fresh()->requested_amount);
-        $this->assertSame('3000.00', Payroll::sole()->cash_advance_deduction);
-        $this->assertSame('5000.00', Payroll::sole()->net_pay);
+        $this->assertSame('750.00', Payroll::sole()->cash_advance_deduction); // 3,000 ÷ 4 installments
+        $this->assertSame('7250.00', Payroll::sole()->net_pay);
 
         // One a month: the next pay period (from Sep 26) is still September.
         $this->requestCashAdvance(1000, '2026-09-27 10:00:00')->assertSessionHasErrors('amount');
 
         $this->advance(); // approved
-        $this->advance(); // released: repaid in full on this payday
-        $this->assertSame(CashAdvanceStatus::Repaid, $advance->fresh()->status);
+        $this->advance(); // released: the first installment is repaid on this payday
+        $this->assertSame('2250.00', $advance->fresh()->remaining_balance);
+        $this->assertSame(CashAdvanceStatus::Approved, $advance->fresh()->displayStatus());
     }
 
     public function test_a_cash_advance_after_the_cutoff_is_repaid_on_the_next_payday_even_before_that_period_is_created(): void
@@ -423,7 +426,7 @@ class PayrollManagementTest extends TestCase
         $contractor = User::factory()->create(); // no client rate
 
         $this->actingAs($contractor)
-            ->post(route('employee.cash-advances.store'), ['amount' => 1000, 'reason' => 'Rent'])
+            ->post(route('employee.cash-advances.store'), ['repayment_months' => 2, 'amount' => 1000, 'reason' => 'Rent'])
             ->assertSessionHasErrors(['amount' => 'You have no pay in this pay period to repay a cash advance from.']);
 
         $this->actingAs($contractor)
@@ -444,23 +447,25 @@ class PayrollManagementTest extends TestCase
         $this->assertSame(CashAdvanceStatus::Pending, CashAdvance::sole()->status);
     }
 
-    public function test_only_what_the_pay_covers_is_recorded_as_repaid(): void
+    public function test_an_installment_never_takes_more_than_the_pay_covers(): void
     {
         Notification::fake();
-        $this->worked(['2026-09-11', '2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18']); // 6 days absent
+        $this->worked(['2026-09-11', '2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-21', '2026-09-22', '2026-09-23']); // 9 days absent
         $this->requestCashAdvance(8000)->assertSessionHasNoErrors();
         $advance = CashAdvance::sole();
         $this->actingAs($this->superAdmin)->post(route('super-admin.cash-advances.approve', $advance))->assertSessionHasNoErrors();
 
         $this->advance(); // verification
         $this->advance(); // locked
-        $this->assertSame('0.00', Payroll::sole()->net_pay); // 8000 − 4363.64 absences − 8000 advance, never below zero
+        // The 2,000 installment is cut to the 1,454.55 left after 9 days of absences (6,545.45), so net pay is zero.
+        $this->assertSame('1454.55', Payroll::sole()->cash_advance_deduction);
+        $this->assertSame('0.00', Payroll::sole()->net_pay);
 
         $this->advance(); // approved
         $this->advance(); // released
 
-        // Only the ₱3,636.36 the pay covered was withheld; the rest is still owed.
-        $this->assertSame('4363.64', $advance->fresh()->remaining_balance);
+        // Only what the pay covered was withheld; the rest is still owed.
+        $this->assertSame('6545.45', $advance->fresh()->remaining_balance);
         $this->assertSame(CashAdvanceStatus::Approved, $advance->fresh()->status);
     }
 

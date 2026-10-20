@@ -4,6 +4,7 @@ namespace App\Services\Dashboard\Widgets;
 
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
+use App\Models\ClientAssignment;
 use App\Models\TimeLog;
 use App\Models\User;
 use App\Services\Dashboard\Contracts\DashboardWidget;
@@ -44,13 +45,14 @@ class AttendanceSummaryWidget implements DashboardWidget
         return [
             'date' => $this->today->toDateString(),
             'expected' => User::query()->workforce()->active()->count(),
-            'accounted' => Attendance::query()->whereDate('date', $this->today)->distinct()->count('employee_id'),
+            // Contractors are counted through the client assignment each row points to.
+            'accounted' => ClientAssignment::query()->whereIn('id', Attendance::query()->whereDate('date', $this->today)->select('assignment_id'))->distinct()->count('contractor_id'),
             'breakdown' => array_map(fn (AttendanceStatus $status) => [
                 'key' => $status->value,
                 'label' => $status->label(),
                 'count' => (int) ($statusCounts[$status->value] ?? 0),
             ], AttendanceStatus::cases()),
-            'clockedIn' => TimeLog::query()->open()->where('time_in', '>=', $openTimerCutoff)->distinct()->count('employee_id'),
+            'clockedIn' => ClientAssignment::query()->whereIn('id', TimeLog::query()->open()->where('time_in', '>=', $openTimerCutoff)->select('assignment_id'))->distinct()->count('contractor_id'),
             'missingClockOut' => TimeLog::query()->open()->where('time_in', '<', $openTimerCutoff)->count(),
         ];
     }

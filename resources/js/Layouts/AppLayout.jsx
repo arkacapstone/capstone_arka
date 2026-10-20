@@ -8,9 +8,9 @@ import { useEffect, useRef, useState } from 'react';
 const COLLAPSE_KEY = 'arka.sidebar.collapsed';
 
 const portalLabels = {
-    super_admin: 'Super Admin Portal',
-    admin: 'Admin Portal',
-    employee: 'Contractor Portal',
+    // super_admin: 'Super Admin Portal',
+    // admin: 'Admin Portal',
+    // employee: 'Contractor Portal',
 };
 
 const dashboardLabels = {
@@ -27,14 +27,9 @@ function readCollapsed() {
     }
 }
 
+// The ARKA logo from public/images (same file as the favicon).
 function SailMark({ className = '' }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-            <path d="M5 18 L12 4 L13.5 7 L8.5 18 Z" className="fill-console-heading" />
-            <path d="M13 6 L19 18 L15 18 L11.8 10.5 Z" fill="#F0A81E" />
-            <path d="M3 20 Q7.5 17.5 12 20 T21 20" fill="none" stroke="#2F8299" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-    );
+    return <img src="/images/arka-mark.png" alt="" aria-hidden="true" className={`object-contain ${className}`} />;
 }
 
 function initialsOf(name) {
@@ -110,9 +105,7 @@ function Sidebar({ collapsed, onNavigate }) {
                 href={route('dashboard')}
                 className={`flex h-[72px] items-center gap-3 border-b border-console-line px-5 ${collapsed ? 'justify-center px-0' : ''}`}
             >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-arka-teal/50">
-                    <SailMark className="h-5 w-5" />
-                </span>
+                <SailMark className="h-10 w-10 shrink-0" />
                 {!collapsed && (
                     <span className="min-w-0">
                         <span className="block font-condensed text-xl font-bold leading-tight tracking-[0.2em] text-console-heading">ARKA</span>
@@ -276,10 +269,10 @@ function ProfileMenu() {
  */
 export default function AppLayout({ title, eyebrow, children }) {
     const { viewMode } = usePage().props;
-    const [collapsed, setCollapsed] = useState(false);
+    // Read on the first render, not in an effect: every page mounts this layout again, and
+    // starting open then collapsing made the sidebar visibly shrink on each navigation.
+    const [collapsed, setCollapsed] = useState(readCollapsed);
     const [mobileOpen, setMobileOpen] = useState(false);
-
-    useEffect(() => setCollapsed(readCollapsed()), []);
 
     const toggleCollapsed = () => {
         setCollapsed((value) => {

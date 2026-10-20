@@ -112,7 +112,7 @@ class LeaveRequestTest extends TestCase
 
         $this->assertSame(LeaveRequestStatus::Approved, $leave->fresh()->status);
 
-        $days = Attendance::query()->where('employee_id', $employee->id)->orderBy('date')->get();
+        $days = Attendance::query()->forEmployee($employee->id)->orderBy('date')->get();
         $this->assertSame(['2026-09-25', '2026-09-28'], $days->map(fn ($day) => $day->date->toDateString())->all(), 'Weekend days are not scheduled.');
         $this->assertTrue($days->every(fn ($day) => $day->status === AttendanceStatus::PaidLeave && $day->client_id === $schedule->client_id));
 

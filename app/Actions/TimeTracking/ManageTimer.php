@@ -39,7 +39,7 @@ class ManageTimer
             throw ValidationException::withMessages(['client_id' => "You're not assigned to that client yet. Your administrator sets up client assignments."]);
         }
 
-        if ($employee->timeLogs()->open()->where('client_id', $clientId)->exists()) {
+        if (TimeLog::query()->forPair($employee->id, $clientId)->open()->exists()) {
             throw ValidationException::withMessages(['client_id' => 'A timer is already running for this client.']);
         }
 
@@ -50,13 +50,13 @@ class ManageTimer
             throw ValidationException::withMessages(['client_id' => "{$date->format('M j')} is in a payroll period that is already locked or released, so no new time can be tracked for it. Contact the Super Admin if this is a mistake."]);
         }
 
-        $log = DB::transaction(fn () => $employee->timeLogs()->create([
+        // The time log points to the contractor's assignment for this client; its status is read from the times.
+        $log = DB::transaction(fn () => TimeLog::query()->create([
+            'employee_id' => $employee->id,
             'client_id' => $clientId,
-            'schedule_id' => $schedule?->id,
             'date' => $date,
             'time_in' => $now,
             'break_minutes' => 0,
-            'status' => TimeLogStatus::Running,
         ]));
 
         $this->sync->handle($employee->id, $clientId, $date);
@@ -98,10 +98,9 @@ class ManageTimer
             $log->update([
                 'break_minutes' => $log->breakMinutesAt($now),
                 'break_started_at' => null,
-                'status' => TimeLogStatus::Running,
             ]);
         } else {
-            $log->update(['break_started_at' => $now, 'status' => TimeLogStatus::OnBreak]);
+            $log->update(['break_started_at' => $now]);
         }
 
         return $log;
@@ -116,9 +115,7 @@ class ManageTimer
             'break_minutes' => $log->breakMinutesAt($now),
             'break_started_at' => null,
             'time_out' => $now,
-            'status' => TimeLogStatus::Completed,
         ]);
-        $log->total_hours = round($log->workedSecondsAt($now) / 3600, 2);
         $log->save();
 
         $this->sync->handle($log->employee_id, $log->client_id, $log->date);
@@ -149,8 +146,8 @@ class ManageTimer
         $stopped = 0;
 
         $open = TimeLog::query()->open()
-            ->when($employee, fn ($query) => $query->where('employee_id', $employee->id))
-            ->with('client:id,client_name')
+            ->when($employee, fn ($query) => $query->forEmployee($employee->id))
+            ->with('client:clients.id,client_name')
             ->get();
 
         foreach ($open as $log) {

@@ -16,7 +16,8 @@ class LeaveTypeFactory extends Factory
     public function definition(): array
     {
         return [
-            'leave_type_name' => fake()->randomElement(['Vacation Leave', 'Sick Leave', 'Emergency Leave']),
+            // Names are unique per home office.
+            'leave_type_name' => fake()->unique()->word().' Leave',
             'is_paid' => true,
             'requires_proof' => false,
         ];

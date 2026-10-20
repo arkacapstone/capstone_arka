@@ -99,15 +99,13 @@ class PayrollOverviewWidget implements DashboardWidget
             return ['gross' => 0.0, 'additions' => 0.0, 'deductions' => 0.0, 'net' => 0.0];
         }
 
-        $sums = $this->period->payrolls()
-            ->selectRaw('
-                coalesce(sum(gross_pay), 0) as gross,
-                coalesce(sum(additional_pay + overtime_amount + reward_amount), 0) as additions,
-                coalesce(sum(absence_deduction + late_deduction + cash_advance_deduction + device_deduction + other_deductions), 0) as deductions,
-                coalesce(sum(net_pay), 0) as net
-            ')
-            ->toBase()
-            ->first();
+        $rows = $this->period->payrolls()->withAmounts()->with('rate')->get();
+        $sums = (object) [
+            'gross' => $rows->sum(fn (Payroll $row) => (float) $row->gross_pay),
+            'additions' => $rows->sum(fn (Payroll $row) => (float) $row->additional_pay + $row->overtime_amount + $row->reward_amount),
+            'deductions' => $rows->sum(fn (Payroll $row) => (float) $row->absence_deduction + (float) $row->late_deduction + $row->cash_advance_deduction + $row->device_deduction + (float) $row->other_deductions),
+            'net' => $rows->sum('net_pay'),
+        ];
 
         return [
             'gross' => round((float) $sums->gross, 2),

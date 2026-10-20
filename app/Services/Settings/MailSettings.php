@@ -2,6 +2,7 @@
 
 namespace App\Services\Settings;
 
+use App\Models\HomeOffice;
 use App\Models\User;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Mail\MailManager;
@@ -29,9 +30,11 @@ class MailSettings
     private const FROM_NAME = 'mail_from_name';
 
     /**
-     * @var array<string, string>|null
+     * Values already read, per home office.
+     *
+     * @var array<int, array<string, string>>
      */
-    private ?array $values = null;
+    private array $values = [];
 
     public function username(): ?string
     {
@@ -66,17 +69,16 @@ class MailSettings
         }
 
         foreach ($changes as $key => $value) {
-            DB::table(self::TABLE)->updateOrInsert(['setting_key' => $key], [
+            DB::table(self::TABLE)->updateOrInsert(['home_office_id' => $by->home_office_id, 'setting_key' => $key], [
                 'setting_value' => $value,
                 'data_type' => 'string',
                 'description' => 'Email sender',
-                'updated_by' => $by->id,
                 'updated_at' => now(),
                 'created_at' => now(),
             ]);
         }
 
-        $this->values = null;
+        $this->values = [];
         $this->apply();
     }
 
@@ -125,15 +127,18 @@ class MailSettings
      */
     private function values(): array
     {
-        if ($this->values !== null) {
-            return $this->values;
+        $homeOfficeId = HomeOffice::currentId();
+
+        if (isset($this->values[$homeOfficeId])) {
+            return $this->values[$homeOfficeId];
         }
 
         if (! Schema::hasTable(self::TABLE)) {
-            return $this->values = [];
+            return [];
         }
 
-        return $this->values = DB::table(self::TABLE)
+        return $this->values[$homeOfficeId] = DB::table(self::TABLE)
+            ->where('home_office_id', $homeOfficeId)
             ->whereIn('setting_key', [self::USERNAME, self::PASSWORD, self::FROM_NAME])
             ->pluck('setting_value', 'setting_key')
             ->all();

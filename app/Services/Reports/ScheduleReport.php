@@ -29,7 +29,7 @@ class ScheduleReport implements Report
     public function summaryRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with('employee:id,name')
+            ->with('employee:users.id,name')
             ->get()
             ->groupBy('employee_id')
             ->map(fn ($schedules) => [
@@ -51,7 +51,7 @@ class ScheduleReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with(['employee:id,name', 'client:id,client_name'])
+            ->with(['employee:users.id,name', 'client:clients.id,client_name'])
             ->orderBy('start_date')
             ->get()
             ->sortBy(fn (Schedule $schedule) => $schedule->employee->name)
@@ -74,9 +74,10 @@ class ScheduleReport implements Report
     private function query(ReportFilters $filters): Builder
     {
         return Schedule::query()
+            ->with(['assignment', 'days'])
             ->whereDate('start_date', '<=', $filters->to)
             ->where(fn (Builder $query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $filters->from))
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->forEmployee($id))
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status));
     }
 }

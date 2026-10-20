@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToHomeOffice;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['leave_type_name', 'is_paid', 'requires_proof', 'max_days'])]
 class LeaveType extends Model
 {
-    use HasFactory;
+    use BelongsToHomeOffice, HasFactory;
 
     protected function casts(): array
     {

@@ -29,7 +29,7 @@ class TimeTrackerController extends Controller
         $validated = $request->validate(['client_id' => ['required', 'integer']]);
 
         $log = $timers->start($request->user(), (int) $validated['client_id']);
-        $log->load('client:id,client_name');
+        $log->load('client:clients.id,client_name');
 
         return back()->with('success', "Timer started for {$log->client->client_name}.");
     }

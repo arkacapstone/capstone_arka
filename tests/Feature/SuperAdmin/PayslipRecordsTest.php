@@ -43,7 +43,8 @@ class PayslipRecordsTest extends TestCase
                 ->where('summary.count', 2)
                 ->where('payslips.0.employee.name', 'Christian Mae')
                 ->where('payslips.0.clients', ['Aurora Dental', 'Northline'])
-                ->where('payslips.0.net', 38750)
+                // Net pay is worked out from each row: gross + 625 additional − 1,000 absence − 250 late.
+                ->where('payslips.0.net', 35750)
                 ->where('payslips.0.status', 'available')
                 ->where('payslips.0.earnings.1.label', fn (string $label) => str_starts_with($label, 'Additional Pay (Northline'))
             );

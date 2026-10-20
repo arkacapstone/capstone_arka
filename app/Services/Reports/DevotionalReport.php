@@ -98,7 +98,7 @@ class DevotionalReport implements Report
         return Devotional::query()
             ->whereDate('date', '>=', $filters->from)
             ->whereDate('date', '<=', $filters->to)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('contractor_id', $id))
             ->get();
     }
 

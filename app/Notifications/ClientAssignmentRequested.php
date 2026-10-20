@@ -18,7 +18,7 @@ class ClientAssignmentRequested extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->request->loadMissing('employee:id,name', 'client:id,client_name', 'requester:id,name');
+        $this->request->loadMissing('employee:users.id,name', 'client:clients.id,client_name', 'requester:id,name');
 
         return "{$this->request->requester->name} assigned {$this->request->employee->name} to {$this->request->clientName()}. Approve it and set the rate, or reject it.";
     }

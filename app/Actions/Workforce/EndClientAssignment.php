@@ -20,8 +20,10 @@ class EndClientAssignment
     {
         $endDate ??= CarbonImmutable::today();
 
-        // An assignment cannot end before it started.
-        $rate->update(['end_date' => $endDate->max($rate->effective_date)]);
+        // An assignment cannot end before it started. The client assignment ends with the rate.
+        $endDate = $endDate->max($rate->effective_date);
+        $rate->update(['end_date' => $endDate]);
+        $rate->assignment->update(['end_date' => $endDate]);
 
         $this->activity->log('workforce', 'Ended client assignment', $rate, "{$rate->employee->name} · {$rate->client->client_name}");
         $this->syncEmploymentType->handle($rate->employee);

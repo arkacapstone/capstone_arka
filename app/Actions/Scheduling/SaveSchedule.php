@@ -121,7 +121,7 @@ class SaveSchedule
      */
     private function ensureClientAssigned(array $attributes): void
     {
-        $assigned = User::find($attributes['employee_id'])?->currentRates()->where('client_id', $attributes['client_id'])->exists();
+        $assigned = User::find($attributes['employee_id'])?->currentRates()->forClient($attributes['client_id'])->exists();
 
         if (! $assigned) {
             throw ValidationException::withMessages([
@@ -139,8 +139,8 @@ class SaveSchedule
     private function ensureWorkWeekLimit(int $employeeId, array $workingDays, CarbonImmutable $from, ?CarbonImmutable $to, ?Schedule $ignore = null): void
     {
         $others = Schedule::query()
-            ->with('client:id,client_name')
-            ->where('employee_id', $employeeId)
+            ->with(['client:clients.id,client_name', 'days'])
+            ->forEmployee($employeeId)
             ->active()
             ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
             ->when($to, fn ($query) => $query->whereDate('start_date', '<=', $to))
@@ -177,7 +177,7 @@ class SaveSchedule
      */
     private function withShiftLength(array $attributes): array
     {
-        $type = User::find($attributes['employee_id'])?->currentRates()->where('client_id', $attributes['client_id'])->first()?->employment_type;
+        $type = User::find($attributes['employee_id'])?->currentRates()->forClient($attributes['client_id'])->first()?->employment_type;
         $hours = match ($type) {
             EmploymentType::FullTime => $this->rules->integer('full_time_hours'),
             EmploymentType::PartTime => $this->rules->integer('part_time_hours'),
@@ -193,7 +193,7 @@ class SaveSchedule
 
     private function describe(Schedule $schedule): string
     {
-        $schedule->loadMissing('employee:id,name', 'client:id,client_name');
+        $schedule->loadMissing('employee:users.id,name', 'client:clients.id,client_name');
 
         return "{$schedule->employee->name} · {$schedule->client->client_name} · ".substr($schedule->start_time, 0, 5).'–'.substr($schedule->end_time, 0, 5);
     }

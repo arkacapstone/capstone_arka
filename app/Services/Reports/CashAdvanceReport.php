@@ -28,7 +28,7 @@ class CashAdvanceReport implements Report
     public function summaryRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with('employee:id,name')
+            ->with('employee:users.id,name')
             ->get()
             ->groupBy('employee_id')
             ->map(function ($advances) {
@@ -55,7 +55,7 @@ class CashAdvanceReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with('employee:id,name')
+            ->with('employee:users.id,name')
             ->orderBy('created_at')
             ->orderBy('id')
             ->get()
@@ -66,7 +66,7 @@ class CashAdvanceReport implements Report
                 $advance->released_date?->toDateString(),
                 $advance->released_date ? round((float) $advance->amount - (float) $advance->remaining_balance, 2) : null,
                 $advance->released_date ? (float) $advance->remaining_balance : null,
-                $advance->status->label(),
+                $advance->displayStatus()->label(),
                 $advance->reason,
             ])
             ->all();
@@ -78,9 +78,10 @@ class CashAdvanceReport implements Report
     private function query(ReportFilters $filters): Builder
     {
         return CashAdvance::query()
+            ->withBalance()
             ->whereDate('created_at', '>=', $filters->from)
             ->whereDate('created_at', '<=', $filters->to)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('contractor_id', $id))
             ->when($filters->status, fn (Builder $query, string $status) => $query->where('status', $status));
     }
 }

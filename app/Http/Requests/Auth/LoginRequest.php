@@ -31,6 +31,8 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            // Set by the "Super Admin log in" form, which only Super Admins may use.
+            'portal' => ['nullable', 'in:super_admin'],
         ];
     }
 

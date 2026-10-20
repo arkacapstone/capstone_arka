@@ -18,7 +18,7 @@ class OvertimeDecided extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->ticket->loadMissing('client:id,client_name');
+        $this->ticket->loadMissing('client:clients.id,client_name');
         $what = "{$this->ticket->duration()} h for {$this->ticket->client->client_name} on {$this->ticket->date->format('M j')}";
 
         if ($this->ticket->status === OvertimeRequest::STATUS_APPROVED) {

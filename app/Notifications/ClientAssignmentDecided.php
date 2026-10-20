@@ -18,7 +18,7 @@ class ClientAssignmentDecided extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->request->loadMissing('employee:id,name', 'client:id,client_name');
+        $this->request->loadMissing('employee:users.id,name', 'client:clients.id,client_name');
         $who = "{$this->request->employee->name} → {$this->request->clientName()}";
 
         if ($this->request->status === ClientAssignmentRequest::STATUS_APPROVED) {

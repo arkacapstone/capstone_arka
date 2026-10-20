@@ -72,7 +72,7 @@ class PayslipReport implements Report
     {
         return PayrollReport::rows(new ReportFilters($filters->from, $filters->to, $filters->employeeId))
             ->where('status', PayrollStatus::Released)
-            ->with(['employee:id,name', 'period:id,period_name,release_date'])
+            ->with(['employee:users.id,name', 'period:id,period_name,release_date'])
             ->get();
     }
 }

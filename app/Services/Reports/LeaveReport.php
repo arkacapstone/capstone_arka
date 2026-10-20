@@ -29,7 +29,7 @@ class LeaveReport implements Report
     public function summaryRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with(['employee:id,name', 'leaveType:id,is_paid'])
+            ->with(['employee:users.id,name', 'leaveType:id,is_paid'])
             ->where('status', 'approved')
             ->get()
             ->groupBy('employee_id')
@@ -52,7 +52,7 @@ class LeaveReport implements Report
     public function detailRows(ReportFilters $filters): array
     {
         return $this->query($filters)
-            ->with(['employee:id,name', 'leaveType:id,leave_type_name,is_paid'])
+            ->with(['employee:users.id,name', 'leaveType:id,leave_type_name,is_paid'])
             ->orderBy('start_date')
             ->orderBy('id')
             ->get()
@@ -77,7 +77,7 @@ class LeaveReport implements Report
         return LeaveRequest::query()
             ->whereDate('start_date', '<=', $filters->to)
             ->whereDate('end_date', '>=', $filters->from)
-            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('employee_id', $id))
+            ->when($filters->employeeId, fn (Builder $query, int $id) => $query->where('contractor_id', $id))
             ->when($filters->status, fn (Builder $query, string $status) => $query->whereHas(
                 'leaveType', fn (Builder $query) => $query->where('is_paid', $status === 'paid')
             ));

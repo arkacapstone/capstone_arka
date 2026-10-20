@@ -78,7 +78,7 @@ class DeductionReport implements Report
     private function rows(ReportFilters $filters): Collection
     {
         return PayrollReport::rows(new ReportFilters($filters->from, $filters->to, $filters->employeeId))
-            ->with(['employee:id,name', 'period:id,period_name', 'client:id,client_name'])
+            ->with(['employee:users.id,name', 'period:id,period_name', 'client:clients.id,client_name'])
             ->get();
     }
 }

@@ -7,6 +7,7 @@ use App\Enums\PayFrequency;
 use App\Enums\PayrollPeriodStatus;
 use App\Enums\PayrollStatus;
 use App\Http\Controllers\Controller;
+use App\Models\ClientAssignment;
 use App\Models\DeviceAssignment;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
@@ -52,8 +53,10 @@ class PayrollController extends Controller
             : PayrollPeriod::query()->where('pay_frequency', $frequency)->has('payrolls')->orderByDesc('end_date')->orderByDesc('id')->first();
         $shown = $latestWithPayroll ?? $current;
 
+        // Net pay is not stored, so each period's total is summed from its rows (with their linked amounts).
+        $netByPeriod = Payroll::query()->withAmounts()->with('rate')->get()->groupBy('period_id')->map(fn ($rows) => $rows->sum('net_pay'));
+
         $periods = PayrollPeriod::query()
-            ->withSum('payrolls', 'net_pay')
             ->orderByDesc('start_date')
             ->orderByDesc('id')
             ->get()
@@ -68,7 +71,7 @@ class PayrollController extends Controller
                 'frequencyValue' => $period->pay_frequency->value,
                 'status' => $period->status->value,
                 'statusLabel' => $period->status->label(),
-                'net' => round((float) $period->payrolls_sum_net_pay, 2),
+                'net' => round((float) ($netByPeriod[$period->id] ?? 0), 2),
             ]);
 
         return Inertia::render('SuperAdmin/Payroll/Index', [
@@ -123,7 +126,8 @@ class PayrollController extends Controller
         $holdSuggestions = $this->holdSuggestions($period);
 
         $rows = $period->payrolls()
-            ->with(['employee:id,name,employee_code,role', 'client:id,client_name', 'rate'])
+            ->withAmounts()
+            ->with(['assignment', 'employee:users.id,name,employee_code,role', 'client:clients.id,client_name', 'rate'])
             ->get()
             ->sortBy(fn (Payroll $row) => [$row->employee->name, $row->client?->client_name])
             ->values()
@@ -162,7 +166,7 @@ class PayrollController extends Controller
             'canAdjust' => $period->status->allowsAdjustments(),
             'canHold' => in_array($period->status, [PayrollPeriodStatus::Locked, PayrollPeriodStatus::Processed, PayrollPeriodStatus::Released], true),
             'canDelete' => $period->status === PayrollPeriodStatus::Open,
-            'employeesPaid' => PayrollCalculator::ratesFor($period)->distinct()->count('employee_id'),
+            'employeesPaid' => ClientAssignment::query()->whereIn('id', PayrollCalculator::ratesFor($period)->select('assignment_id'))->distinct()->count('contractor_id'),
             'verification' => [
                 'verified' => $period->verifications()->whereNotNull('verified_at')->count(),
                 'adminSubmittedAt' => $period->admin_submitted_at?->toIso8601String(),
@@ -248,12 +252,12 @@ class PayrollController extends Controller
     private function holdSuggestions(PayrollPeriod $period): array
     {
         return DeviceAssignment::query()
-            ->where('status', DeviceAssignment::STATUS_LOST)
-            ->whereIn('employee_id', $period->payrolls()->select('employee_id'))
+            ->where('end_reason', DeviceAssignment::STATUS_LOST)
+            ->whereIn('contractor_id', ClientAssignment::query()->select('contractor_id')->whereIn('id', $period->payrolls()->select('assignment_id')))
             ->whereDoesntHave('deduction.payroll', fn ($query) => $query->where('status', PayrollStatus::Released))
             ->with('device:id,device_name,serial_number')
             ->get()
-            ->groupBy('employee_id')
+            ->groupBy('contractor_id')
             ->map(fn ($assignments) => 'Lost company equipment: '.$assignments->map(fn (DeviceAssignment $assignment) => $assignment->device->device_name)->implode(', '))
             ->all();
     }

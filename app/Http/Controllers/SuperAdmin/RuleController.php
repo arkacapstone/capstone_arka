@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
+use App\Models\HomeOffice;
 use App\Models\LeaveType;
+use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\Settings\MailSettings;
 use App\Services\Settings\SystemRules;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,13 +31,19 @@ class RuleController extends Controller
         'deductions' => ['title' => 'Administrative & device deductions', 'subtitle' => 'Which deductions payroll applies. Tithes and devotional penalties are never deducted.'],
         'time_tracking' => ['title' => 'Time tracking', 'subtitle' => 'When contractors can start a timer. It stops by itself at the end of the shift; overtime goes through a ticket.'],
         'cutoff' => ['title' => 'Payroll cutoff & release', 'subtitle' => 'The semi-monthly cycle used to create new payroll periods.'],
-        'system' => ['title' => 'Basic system configuration', 'subtitle' => 'General details shown across ARKA.'],
+        'system' => ['title' => 'Home Offices', 'subtitle' => 'General details shown across ARKA.'],
     ];
 
-    public function index(SystemRules $rules, MailSettings $mail): Response
+    public function index(Request $request, SystemRules $rules, MailSettings $mail): Response
     {
+        // The Home Offices section shows the signed-in Super Admin's home office name and address.
+        $groups = array_map(
+            fn (array $group) => $group['key'] === 'system' ? [...$group, 'rules' => self::homeOfficeRules($request->user())] : $group,
+            $this->groups($rules, array_keys(self::GROUPS)),
+        );
+
         return Inertia::render('SuperAdmin/Rules/Index', [
-            'groups' => $this->groups($rules, array_keys(self::GROUPS)),
+            'groups' => $groups,
             'mail' => [
                 'username' => $mail->username() ?? '',
                 'fromName' => $mail->fromName(),
@@ -53,6 +62,10 @@ class RuleController extends Controller
 
     public function update(Request $request, SystemRules $rules, ActivityLogger $activity): RedirectResponse
     {
+        if ($request->has('home_office_name')) {
+            return $this->renameHomeOffice($request, $activity);
+        }
+
         $validated = $request->validate(self::validationRules($request->keys()));
 
         $first = $validated['first_cutoff_day'] ?? $rules->integer('first_cutoff_day');
@@ -87,6 +100,72 @@ class RuleController extends Controller
         $activity->log('rules', 'Updated leave type', $leaveType, $leaveType->leave_type_name);
 
         return back()->with('success', "{$leaveType->leave_type_name} updated.");
+    }
+
+    /**
+     * The Home Offices fields: the Super Admin's home office name and address.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function homeOfficeRules(User $user): array
+    {
+        return [
+            [
+                'key' => 'home_office_name',
+                'label' => 'Organization name',
+                'type' => 'string',
+                'description' => 'Your home office. Printed on payslips and reports.',
+                'min' => null,
+                'max' => null,
+                'value' => $user->homeOffice?->name ?? '',
+            ],
+            [
+                'key' => 'home_office_address',
+                'label' => 'Address',
+                'type' => 'string',
+                'description' => 'Optional. Printed on payslips under the organization name.',
+                'min' => null,
+                'max' => null,
+                'value' => $user->homeOffice?->address ?? '',
+            ],
+        ];
+    }
+
+    /**
+     * Saves the Super Admin's home office name and address. The name stays unique in any letter case.
+     */
+    private function renameHomeOffice(Request $request, ActivityLogger $activity): RedirectResponse
+    {
+        $homeOffice = $request->user()->homeOffice;
+
+        $validated = $request->validate([
+            'home_office_name' => ['required', 'string', 'max:255', function (string $attribute, mixed $value, Closure $fail) use ($homeOffice) {
+                $taken = HomeOffice::query()
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])
+                    ->whereKeyNot($homeOffice->id)
+                    ->exists();
+
+                if ($taken) {
+                    $fail('A home office with this name already exists.');
+                }
+            }],
+            'home_office_address' => ['nullable', 'string', 'max:255'],
+        ], [], ['home_office_name' => 'organization name', 'home_office_address' => 'address']);
+
+        $homeOffice->fill([
+            'name' => $validated['home_office_name'],
+            // Only changed when the form sends it; an empty field clears it.
+            ...($request->has('home_office_address') ? ['address' => $validated['home_office_address'] ?: null] : []),
+        ]);
+
+        if (! $homeOffice->isDirty()) {
+            return back()->with('success', 'No changes to save.');
+        }
+
+        $homeOffice->save();
+        $activity->log('rules', 'Updated home office details', $homeOffice, $homeOffice->name);
+
+        return back()->with('success', 'Home office details updated.');
     }
 
     /**
@@ -149,7 +228,7 @@ class RuleController extends Controller
     private function leaveTypeAttributes(Request $request, ?LeaveType $current = null): array
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:100', Rule::unique(LeaveType::class, 'leave_type_name')->ignore($current)],
+            'name' => ['required', 'string', 'max:100', Rule::unique(LeaveType::class, 'leave_type_name')->where('home_office_id', HomeOffice::currentId())->ignore($current)],
             'paid' => ['required', 'boolean'],
         ]);
 

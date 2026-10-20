@@ -27,7 +27,7 @@ class ActiveSchedulesWidget implements DashboardWidget
             ->active()
             ->applicableOn($this->now->subDay())
             ->orWhere(fn ($query) => $query->active()->applicableOn($this->now))
-            ->with('client:id,client_name')
+            ->with(['client:clients.id,client_name', 'assignment', 'days'])
             ->get();
 
         $onShift = $schedules->filter(fn (Schedule $schedule) => $schedule->isOnShiftAt($this->now));

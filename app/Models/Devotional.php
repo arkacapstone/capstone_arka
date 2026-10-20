@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToContractor;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A daily devotional proof upload (Blueprint §9). Compliance only — never a payroll deduction.
  */
-#[Fillable(['employee_id', 'date', 'title', 'file_path', 'file_name', 'file_size', 'submitted_at'])]
+#[Fillable(['contractor_id', 'employee_id', 'date', 'title', 'file_path', 'file_name', 'file_size', 'submitted_at'])]
 class Devotional extends Model
 {
-    use HasFactory;
+    use BelongsToContractor, HasFactory;
 
     protected function casts(): array
     {
@@ -23,14 +23,6 @@ class Devotional extends Model
             'submitted_at' => 'immutable_datetime',
             'file_size' => 'integer',
         ];
-    }
-
-    /**
-     * @return BelongsTo<User, $this>
-     */
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'employee_id');
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\SuperAdmin;
 
+use App\Models\HomeOffice;
 use App\Models\LeaveType;
 use App\Models\User;
 use App\Services\Settings\SystemRules;
@@ -83,5 +84,52 @@ class SystemRulesTest extends TestCase
         $this->actingAs(User::factory()->admin()->create())
             ->put(route('super-admin.rules.update'), ['default_working_days' => 20])
             ->assertForbidden();
+    }
+
+    public function test_the_organization_name_is_the_home_office_name(): void
+    {
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.rules'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groups.4.rules.0.key', 'home_office_name')
+                ->where('groups.4.rules.0.value', $this->superAdmin->homeOffice->name));
+
+        $this->actingAs($this->superAdmin)
+            ->put(route('super-admin.rules.update'), ['home_office_name' => 'Harbor Staffing'])
+            ->assertSessionHas('success', 'Home office details updated.');
+
+        $this->assertSame('Harbor Staffing', $this->superAdmin->homeOffice->fresh()->name);
+    }
+
+    public function test_the_home_office_address_can_be_set_and_cleared(): void
+    {
+        $name = $this->superAdmin->homeOffice->name;
+
+        $this->actingAs($this->superAdmin)
+            ->put(route('super-admin.rules.update'), ['home_office_name' => $name, 'home_office_address' => 'Cebu City, Philippines'])
+            ->assertSessionHas('success', 'Home office details updated.');
+
+        $this->assertSame('Cebu City, Philippines', $this->superAdmin->homeOffice->fresh()->address);
+
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.rules'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groups.4.rules.1.key', 'home_office_address')
+                ->where('groups.4.rules.1.value', 'Cebu City, Philippines'));
+
+        $this->actingAs($this->superAdmin)
+            ->put(route('super-admin.rules.update'), ['home_office_name' => $name, 'home_office_address' => ''])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull($this->superAdmin->homeOffice->fresh()->address);
+    }
+
+    public function test_the_organization_name_cannot_copy_another_home_office(): void
+    {
+        HomeOffice::query()->create(['name' => 'Other Workforce Inc.']);
+
+        $this->actingAs($this->superAdmin)
+            ->put(route('super-admin.rules.update'), ['home_office_name' => 'other workforce inc.'])
+            ->assertSessionHasErrors('home_office_name');
     }
 }

@@ -19,7 +19,7 @@ class LeaveRequestSubmitted extends ArkaNotification
 
     protected function message(object $notifiable): string
     {
-        $this->leave->loadMissing('employee:id,name');
+        $this->leave->loadMissing('employee:users.id,name');
 
         $message = "{$this->leave->employee->name} requested leave for {$this->leave->start_date->format('M j')} – {$this->leave->end_date->format('M j, Y')}.";
 
